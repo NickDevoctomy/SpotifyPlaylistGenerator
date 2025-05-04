@@ -22,6 +22,10 @@ class AppUI:
         self.user_info = None
         self.playlists = []
         self.current_view = "Tiled"  # Default view mode
+        self.playlist_tabs = None
+        self.playlist_tab_panels = None
+        self.selected_playlist = None
+        self.created_tabs = set()  # Track which tabs have been created
         
         # Initialize template loader
         self.template_loader = TemplateLoader()
@@ -188,12 +192,42 @@ class AppUI:
         """Render playlists in a grid tile layout."""
         with ui.grid(columns=3).classes('w-full gap-4'):
             for playlist in self.playlists:
-                PlaylistComponents.render_playlist_card(playlist)
+                PlaylistComponents.render_playlist_card(playlist, on_click=self._open_playlist_detail)
     
     def _render_list_view(self):
         """Render playlists in a list layout."""
         for playlist in self.playlists:
-            PlaylistComponents.render_playlist_list_item(playlist)
+            PlaylistComponents.render_playlist_list_item(playlist, on_click=self._open_playlist_detail)
+    
+    def _open_playlist_detail(self, playlist):
+        """Open the playlist detail view in a new tab."""
+        self.selected_playlist = playlist
+        
+        # Switch to the playlist detail tab
+        self._create_playlist_detail_tab(playlist)
+        self.playlist_tabs.value = f"playlist-{playlist['id']}"
+    
+    def _create_playlist_detail_tab(self, playlist):
+        """Create a new tab for the playlist detail view if it doesn't exist."""
+        tab_id = f"playlist-{playlist['id']}"
+        
+        # Check if the tab already exists using our tracking set
+        if tab_id not in self.created_tabs:
+            with self.playlist_tabs:
+                ui.tab(tab_id)
+                self.created_tabs.add(tab_id)  # Track that we've created this tab
+            
+            with self.playlist_tab_panels:
+                with ui.tab_panel(tab_id):
+                    PlaylistComponents.render_playlist_detail(playlist, on_back=self._back_to_playlists)
+    
+    def _back_to_playlists(self):
+        """Go back to the playlists list view."""
+        # Switch to the main tab
+        self.playlist_tabs.value = "playlists-main"
+        
+        # Clear the selected playlist
+        self.selected_playlist = None
     
     def _change_view(self, view):
         """Change the playlist view mode and refresh the display."""
@@ -205,32 +239,43 @@ class AppUI:
     def _setup_playlists_tab(self):
         """Set up the content for the playlists tab."""
         with ui.card().classes('w-full'):
-            ui.label('My Playlists').classes('text-h6')
+            # Create hidden tabs for playlists
+            with ui.tabs().classes('w-full hidden-tabs') as self.playlist_tabs:
+                # Apply custom styling to hide tabs
+                CustomStyles.add_hidden_tabs_style()
+                ui.tab('playlists-main')
+                # Add initial tab to our set of created tabs
+                self.created_tabs.add('playlists-main')
             
-            # Show a message if user is not authenticated
-            if not self.is_authenticated:
-                ui.label('Please log in to view your playlists').classes('text-subtitle1')
-                ui.button('Login', icon='login').classes('bg-green-600 text-white').on('click', self._handle_login)
-            else:
-                # Top row with controls
-                with ui.row().classes('w-full justify-end items-center mb-4'):
-                    with ui.row().classes('items-center'):
-                        # View switcher
-                        ui.label('View:').classes('mr-2')
-                        view_select = ui.select(
-                            ['Tiled', 'List'], 
-                            value=self.current_view,
-                            on_change=lambda e: self._change_view(e.value)
-                        ).classes('min-w-[100px]')
+            # Create tab panels for playlists
+            with ui.tab_panels(self.playlist_tabs, value='playlists-main').classes('w-full') as self.playlist_tab_panels:
+                with ui.tab_panel('playlists-main'):
+                    ui.label('My Playlists').classes('text-h6')
+                    
+                    # Show a message if user is not authenticated
+                    if not self.is_authenticated:
+                        ui.label('Please log in to view your playlists').classes('text-subtitle1')
+                        ui.button('Login', icon='login').classes('bg-green-600 text-white').on('click', self._handle_login)
+                    else:
+                        # Top row with controls
+                        with ui.row().classes('w-full justify-end items-center mb-4'):
+                            with ui.row().classes('items-center'):
+                                # View switcher
+                                ui.label('View:').classes('mr-2')
+                                view_select = ui.select(
+                                    ['Tiled', 'List'], 
+                                    value=self.current_view,
+                                    on_change=lambda e: self._change_view(e.value)
+                                ).classes('min-w-[100px]')
+                                
+                                # Refresh button
+                                ui.button('Refresh', icon='refresh').classes('ml-4').on('click', self._fetch_playlists)
                         
-                        # Refresh button
-                        ui.button('Refresh', icon='refresh').classes('ml-4').on('click', self._fetch_playlists)
-                
-                # Create container for playlists
-                self.playlist_container = ui.element('div').classes('w-full mt-4')
-                
-                # Initial load of playlists
-                self._fetch_playlists()
+                        # Create container for playlists
+                        self.playlist_container = ui.element('div').classes('w-full mt-4')
+                        
+                        # Initial load of playlists
+                        self._fetch_playlists()
     
     def _setup_settings_tab(self):
         """Set up the content for the settings tab."""
