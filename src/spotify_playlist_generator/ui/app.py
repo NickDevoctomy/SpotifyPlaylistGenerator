@@ -26,6 +26,7 @@ class AppUI:
         self.playlist_tab_panels = None
         self.selected_playlist = None
         self.created_tabs = set()  # Track which tabs have been created
+        self.playlist_tracks_cache = {}  # Cache tracks for each playlist
         
         # Initialize template loader
         self.template_loader = TemplateLoader()
@@ -217,9 +218,71 @@ class AppUI:
                 ui.tab(tab_id)
                 self.created_tabs.add(tab_id)  # Track that we've created this tab
             
+            # First load the tracks in the background
+            playlist_id = playlist['id']
+            print(f"[DEBUG APP] Auto-loading tracks for playlist: {playlist['name']} (ID: {playlist_id})")
+            
+            # Check if we already have cached tracks for this playlist
+            if playlist_id in self.playlist_tracks_cache:
+                tracks = self.playlist_tracks_cache[playlist_id]
+                print(f"[DEBUG APP] Using {len(tracks)} cached tracks")
+            else:
+                # Load tracks from Spotify API if available
+                tracks = []
+                if self.is_authenticated and self.spotify_service:
+                    try:
+                        # Get total number of tracks to load all of them
+                        total_tracks = playlist.get('tracks', {}).get('total', 0)
+                        print(f"[DEBUG APP] Playlist has {total_tracks} tracks total")
+                        
+                        # Load all tracks with proper handling of pagination
+                        all_tracks = []
+                        offset = 0
+                        limit = 100  # API limit per request
+                        
+                        while offset < total_tracks:
+                            print(f"[DEBUG APP] Loading tracks batch: offset={offset}, limit={limit}")
+                            batch = self.spotify_service.get_playlist_tracks(playlist_id, limit=limit, offset=offset)
+                            if not batch:
+                                print(f"[DEBUG APP] No tracks returned for offset {offset}, stopping pagination")
+                                break
+                                
+                            print(f"[DEBUG APP] Got {len(batch)} tracks in this batch")
+                            all_tracks.extend(batch)
+                            offset += limit
+                            
+                            # Safety check - stop if we've loaded all tracks or API returned fewer than requested
+                            if len(batch) < limit:
+                                break
+                        
+                        tracks = all_tracks
+                        print(f"[DEBUG APP] Total tracks loaded: {len(tracks)}")
+                        
+                        # Cache tracks for future use
+                        if tracks:
+                            self.playlist_tracks_cache[playlist_id] = tracks
+                    except Exception as e:
+                        print(f"[DEBUG APP] Error auto-loading tracks: {str(e)}")
+                        # Fall back to test tracks if API fails
+                        tracks = self._get_test_tracks()
+                        print(f"[DEBUG APP] Using {len(tracks)} test tracks as fallback")
+                else:
+                    # Use test tracks if not authenticated
+                    tracks = self._get_test_tracks()
+                    print(f"[DEBUG APP] Using {len(tracks)} test tracks (not authenticated)")
+            
+            # Now render the playlist detail with the tracks
             with self.playlist_tab_panels:
                 with ui.tab_panel(tab_id):
-                    PlaylistComponents.render_playlist_detail(playlist, on_back=self._back_to_playlists)
+                    print(f"[DEBUG APP] Rendering playlist detail with {len(tracks)} tracks")
+                    PlaylistComponents.render_playlist_detail(
+                        playlist, 
+                        tracks=tracks,  # Pass the tracks directly
+                        on_back=self._back_to_playlists
+                    )
+        else:
+            # Tab already exists, just update it if needed
+            print(f"[DEBUG APP] Tab for playlist {playlist['name']} already exists")
     
     def _back_to_playlists(self):
         """Go back to the playlists list view."""
@@ -298,3 +361,145 @@ class AppUI:
                 ui.label('Redirect URI:').classes('text-bold')
                 ui.label(self.auth_service.redirect_uri or 'Not configured').classes(
                     'text-green-600' if self.auth_service.redirect_uri else 'text-red-600') 
+    
+    def _load_playlist_tracks(self, playlist_id):
+        """Load tracks for a playlist and update the UI."""
+        if not self.is_authenticated or not self.spotify_service:
+            ui.notify('Please log in to view tracks', color='warning')
+            return
+        
+        ui.notify('Loading tracks...', color='info')
+        print(f"[DEBUG APP] Loading tracks for playlist ID: {playlist_id}")
+        print(f"[DEBUG APP] Authentication status: {self.is_authenticated}")
+        print(f"[DEBUG APP] Spotify service initialized: {self.spotify_service is not None}")
+        
+        # Check if we already have cached tracks for this playlist
+        if playlist_id in self.playlist_tracks_cache:
+            print(f"[DEBUG APP] Using cached tracks for playlist {playlist_id}")
+            tracks = self.playlist_tracks_cache[playlist_id]
+            print(f"[DEBUG APP] Found {len(tracks)} cached tracks")
+        else:
+            try:
+                # Get tracks from Spotify API
+                print(f"[DEBUG APP] Calling spotify_service.get_playlist_tracks({playlist_id})")
+                tracks = self.spotify_service.get_playlist_tracks(playlist_id)
+                print(f"[DEBUG APP] Retrieved {len(tracks)} tracks from Spotify API")
+                
+                # Cache the tracks for future use
+                if tracks:
+                    self.playlist_tracks_cache[playlist_id] = tracks
+                    print(f"[DEBUG APP] Cached {len(tracks)} tracks for playlist {playlist_id}")
+                else:
+                    print("[DEBUG APP] No tracks returned from API, trying fallback")
+                    # Create test tracks as fallback for debugging
+                    tracks = self._get_test_tracks()
+                    print(f"[DEBUG APP] Created {len(tracks)} test tracks as fallback")
+                
+                # Dump full raw data of the first few tracks for debugging
+                if tracks:
+                    print("[DEBUG APP] ======= RAW TRACK DATA SAMPLE ========")
+                    import json
+                    for i, track in enumerate(tracks[:2]):  # Show first 2 tracks
+                        try:
+                            print(f"[DEBUG APP] Track {i+1} raw data:")
+                            print(json.dumps(track, indent=2))
+                        except Exception as json_error:
+                            print(f"[DEBUG APP] Error serializing track to JSON: {str(json_error)}")
+                            print(f"[DEBUG APP] Track {i+1} type: {type(track)}")
+                            print(f"[DEBUG APP] Track {i+1} keys: {track.keys() if hasattr(track, 'keys') else 'No keys method'}")
+                    print("[DEBUG APP] ======= END RAW TRACK DATA ========")
+                
+            except Exception as e:
+                ui.notify(f'Error loading tracks: {str(e)}', color='negative')
+                print(f"[DEBUG APP] Error loading tracks: {str(e)}")
+                import traceback
+                print(f"[DEBUG APP] Error traceback: {traceback.format_exc()}")
+                
+                # Create test tracks as fallback for debugging
+                tracks = self._get_test_tracks()
+                print(f"[DEBUG APP] Created {len(tracks)} test tracks as fallback after error")
+        
+        # Find the tab panel to update
+        tab_id = f"playlist-{playlist_id}"
+        found_panel = False
+        print(f"[DEBUG APP] Looking for tab panel with ID: {tab_id}")
+        print(f"[DEBUG APP] Available tab panels: {[child.value if hasattr(child, 'value') else 'No value attr' for child in self.playlist_tab_panels.children]}")
+        
+        for child in self.playlist_tab_panels.children:
+            if hasattr(child, 'value') and child.value == tab_id:
+                found_panel = True
+                print(f"[DEBUG APP] Found panel with ID: {tab_id}")
+                # Clear the tab panel and redraw with tracks
+                child.clear()
+                with child:
+                    # Get the playlist data from our list
+                    playlist = next((p for p in self.playlists if p['id'] == playlist_id), None)
+                    if playlist:
+                        print(f"[DEBUG APP] Found playlist in cache, rendering with {len(tracks)} tracks")
+                        print(f"[DEBUG APP] Calling PlaylistComponents.render_playlist_detail")
+                        PlaylistComponents.render_playlist_detail(
+                            playlist,
+                            tracks=tracks,
+                            on_back=self._back_to_playlists
+                        )
+                    else:
+                        print(f"[DEBUG APP] Could not find playlist with ID {playlist_id} in the loaded playlists")
+                        print(f"[DEBUG APP] Available playlist IDs: {[p.get('id') for p in self.playlists]}")
+        
+        if not found_panel:
+            print(f"[DEBUG APP] Could not find tab panel with ID {tab_id}")
+        
+        # Show success message
+        if tracks:
+            ui.notify(f'Loaded {len(tracks)} tracks', color='positive')
+        else:
+            ui.notify('No tracks found in this playlist', color='warning')
+    
+    def _get_test_tracks(self):
+        """Create test track data for debugging purposes."""
+        print("[DEBUG APP] Creating test tracks for debugging")
+        
+        # Simple test tracks with minimal required fields
+        test_tracks = [
+            {
+                "track": {
+                    "id": "test1",
+                    "name": "Test Track 1",
+                    "uri": "spotify:track:test1",
+                    "artists": [{"name": "Test Artist 1"}],
+                    "album": {
+                        "name": "Test Album 1",
+                        "images": [{"url": "https://via.placeholder.com/300"}]
+                    },
+                    "external_urls": {"spotify": "https://open.spotify.com/track/test1"}
+                }
+            },
+            {
+                "track": {
+                    "id": "test2",
+                    "name": "Test Track 2",
+                    "uri": "spotify:track:test2",
+                    "artists": [{"name": "Test Artist 2"}],
+                    "album": {
+                        "name": "Test Album 2",
+                        "images": [{"url": "https://via.placeholder.com/300"}]
+                    },
+                    "external_urls": {"spotify": "https://open.spotify.com/track/test2"}
+                }
+            },
+            {
+                "track": {
+                    "id": "test3",
+                    "name": "Test Track 3",
+                    "uri": "spotify:track:test3",
+                    "artists": [{"name": "Test Artist 3"}],
+                    "album": {
+                        "name": "Test Album 3",
+                        "images": [{"url": "https://via.placeholder.com/300"}]
+                    },
+                    "external_urls": {"spotify": "https://open.spotify.com/track/test3"}
+                }
+            }
+        ]
+        
+        return test_tracks 

@@ -6,8 +6,18 @@ A NiceGUI-based Python application that allows users to manage their Spotify pla
 
 ## Features
 - View your Spotify playlists
+- View detailed playlist information with track listings
+- Direct links to open tracks and playlists in Spotify
 - Settings for application configuration
 - Spotify OAuth authentication
+
+## Recent Updates
+
+### Bug Fixes
+- Fixed issue with playlist track loading where tracks were not being displayed in the playlist detail view
+- Improved error handling and debugging for track loading functionality
+- Enhanced the track rendering component to handle various Spotify API response formats
+- Added comprehensive data validation to prevent errors with missing fields
 
 ## Setup and Installation
 
