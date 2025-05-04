@@ -7,6 +7,7 @@ import webbrowser
 import traceback
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from src.spotify_playlist_generator.services.auth_service import SpotifyAuthService
+from src.spotify_playlist_generator.services.spotify_service import SpotifyService
 
 class AppUI:
     """Main UI class that handles the application interface."""
@@ -14,8 +15,10 @@ class AppUI:
     def __init__(self):
         """Initialize the UI components."""
         self.auth_service = SpotifyAuthService()
+        self.spotify_service = None
         self.is_authenticated = False
         self.user_info = None
+        self.playlists = []
         
         # Set up the callback route for Spotify OAuth
         self._setup_callback_route()
@@ -24,6 +27,7 @@ class AppUI:
         if self.auth_service.check_token():
             self.is_authenticated = True
             self.user_info = self.auth_service.get_user_info()
+            self.spotify_service = SpotifyService(self.auth_service.get_spotify_client())
         
         # Set up the main page
         self._setup_main_page()
@@ -48,6 +52,8 @@ class AppUI:
                     if success:
                         self.is_authenticated = True
                         self.user_info = self.auth_service.get_user_info()
+                        # Initialize Spotify service with the authenticated client
+                        self.spotify_service = SpotifyService(self.auth_service.get_spotify_client())
                         
                         # Create a proper HTML response
                         html_content = """
@@ -261,6 +267,8 @@ class AppUI:
         self.auth_service.logout()
         self.is_authenticated = False
         self.user_info = None
+        self.spotify_service = None
+        self.playlists = []
         
         # Update the login button
         if hasattr(self, 'login_button'):
@@ -295,19 +303,96 @@ class AppUI:
             with ui.tab_panel('Settings'):
                 self._setup_settings_tab()
     
+    def _fetch_playlists(self):
+        """Fetch user's playlists from Spotify."""
+        if not self.is_authenticated or not self.spotify_service:
+            return
+        
+        ui.notify('Fetching your playlists...', color='info')
+        
+        # Clear existing playlists
+        self.playlists = []
+        
+        # Get playlists from Spotify
+        self.playlists = self.spotify_service.get_user_playlists()
+        
+        # Update UI
+        if hasattr(self, 'playlist_container'):
+            self.playlist_container.clear()
+            self._render_playlists()
+            
+        # Show success message
+        if self.playlists:
+            ui.notify(f'Found {len(self.playlists)} playlists', color='positive')
+        else:
+            ui.notify('No playlists found', color='warning')
+    
+    def _render_playlists(self):
+        """Render the playlists in the UI."""
+        if not hasattr(self, 'playlist_container'):
+            return
+            
+        with self.playlist_container:
+            if not self.playlists:
+                ui.label('No playlists found').classes('text-subtitle1')
+                return
+                
+            # Create a grid layout for playlists
+            with ui.grid(columns=3).classes('w-full gap-4'):
+                for playlist in self.playlists:
+                    self._render_playlist_card(playlist)
+    
+    def _render_playlist_card(self, playlist):
+        """Render a single playlist card."""
+        # Get playlist data
+        name = playlist.get('name', 'Unnamed Playlist')
+        description = playlist.get('description', '')
+        total_tracks = playlist.get('tracks', {}).get('total', 0)
+        owner = playlist.get('owner', {}).get('display_name', 'Unknown')
+        
+        # Get the image URL (use the first image if available)
+        image_url = None
+        if playlist.get('images') and len(playlist['images']) > 0:
+            image_url = playlist['images'][0].get('url')
+        
+        # Create a card for the playlist
+        with ui.card().classes('w-full h-full'):
+            if image_url:
+                ui.image(image_url).classes('w-full aspect-square object-cover')
+            else:
+                # Placeholder for missing image
+                with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center'):
+                    ui.icon('music_note', size='xl').classes('text-gray-400')
+            
+            with ui.card_section():
+                ui.label(name).classes('font-bold text-lg truncate w-full')
+                if description:
+                    ui.label(description).classes('text-xs text-gray-500 h-8 overflow-hidden')
+                
+                with ui.row().classes('items-center justify-between w-full'):
+                    ui.label(f"{total_tracks} tracks").classes('text-xs')
+                    ui.label(f"By {owner}").classes('text-xs')
+    
     def _setup_playlists_tab(self):
         """Set up the content for the playlists tab."""
         with ui.card().classes('w-full'):
-            ui.label('My Playlists Content').classes('text-h6')
+            ui.label('My Playlists').classes('text-h6')
             
             # Show a message if user is not authenticated
             if not self.is_authenticated:
                 ui.label('Please log in to view your playlists').classes('text-subtitle1')
                 ui.button('Login', icon='login').classes('bg-green-600 text-white').on('click', self._handle_login)
             else:
-                # Content for authenticated users will be added here
-                ui.label(f"Welcome {self.user_info.get('display_name', 'User')}!").classes('text-subtitle1')
-                ui.label("Your playlists will appear here").classes('text-body1')
+                # Add refresh button
+                with ui.row().classes('w-full justify-between items-center'):
+                    ui.label(f"Welcome {self.user_info.get('display_name', 'User')}!").classes('text-subtitle1')
+                    ui.button('Refresh', icon='refresh').on('click', self._fetch_playlists)
+                
+                # Create container for playlists
+                self.playlist_container = ui.element('div').classes('w-full mt-4')
+                
+                # Initial load of playlists
+                self._fetch_playlists()
     
     def _setup_settings_tab(self):
         """Set up the content for the settings tab."""
