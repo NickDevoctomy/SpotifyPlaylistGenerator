@@ -191,16 +191,22 @@ class TestSpotifyService(unittest.TestCase):
                     'track': {
                         'id': 'track1',
                         'name': 'Track 1',
+                        'uri': 'spotify:track:track1',
+                        'duration_ms': 180000,
                         'artists': [{'name': 'Artist 1'}],
-                        'album': {'name': 'Album 1', 'images': []}
+                        'album': {'name': 'Album 1', 'images': []},
+                        'external_urls': {'spotify': 'https://open.spotify.com/track/track1'}
                     }
                 },
                 {
                     'track': {
                         'id': 'track2',
                         'name': 'Track 2',
+                        'uri': 'spotify:track:track2',
+                        'duration_ms': 210000,
                         'artists': [{'name': 'Artist 2'}],
-                        'album': {'name': 'Album 2', 'images': []}
+                        'album': {'name': 'Album 2', 'images': []},
+                        'external_urls': {'spotify': 'https://open.spotify.com/track/track2'}
                     }
                 }
             ]
@@ -222,7 +228,7 @@ class TestSpotifyService(unittest.TestCase):
             'playlist1',
             limit=50,
             offset=0,
-            fields='items(track(id,name,artists(name),album(name,images)))'
+            fields='items(track(id,name,uri,duration_ms,artists(name),album(name,images),external_urls))'
         )
     
     def test_get_playlist_tracks_error(self):
@@ -239,6 +245,86 @@ class TestSpotifyService(unittest.TestCase):
         
         # Verify empty list is returned on error
         self.assertEqual(tracks, [])
+
+    def test_get_playlist_tracks_with_missing_fields(self):
+        """Test getting playlist tracks with missing fields."""
+        # Create mock client with incomplete track data
+        mock_client = MagicMock()
+        mock_client.playlist_tracks.return_value = {
+            'items': [
+                {
+                    'track': {
+                        'id': 'track1',
+                        'name': 'Track 1',
+                        # Missing 'artists' field
+                        # Missing 'album' field
+                        # Missing 'external_urls' field
+                    }
+                },
+                {
+                    'track': None  # Track is None
+                },
+                {
+                    # Missing 'track' field entirely
+                }
+            ]
+        }
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get tracks
+        tracks = service.get_playlist_tracks('playlist1')
+        
+        # Verify valid tracks are returned and invalid ones filtered out
+        self.assertEqual(len(tracks), 1)
+        
+        # Verify fields were added
+        self.assertIn('artists', tracks[0]['track'])
+        self.assertEqual(tracks[0]['track']['artists'], [])
+        
+        self.assertIn('album', tracks[0]['track'])
+        self.assertEqual(tracks[0]['track']['album']['name'], 'Unknown Album')
+        self.assertEqual(tracks[0]['track']['album']['images'], [])
+        
+        self.assertIn('external_urls', tracks[0]['track'])
+        self.assertEqual(tracks[0]['track']['external_urls']['spotify'], 'https://open.spotify.com/track/track1')
+
+    def test_get_playlist_tracks_with_fallback(self):
+        """Test getting playlist tracks with fallback for API error."""
+        # Create mock client
+        mock_client = MagicMock()
+        
+        # Make first call fail with exception
+        mock_client.playlist_tracks.side_effect = [
+            Exception("API error with specific fields"),  # First call fails
+            {'items': [{'track': {'id': 'track1', 'name': 'Track 1', 'artists': [{'name': 'Artist 1'}], 'album': {'name': 'Album 1', 'images': []}}}]}  # Second call succeeds
+        ]
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get tracks
+        tracks = service.get_playlist_tracks('playlist1')
+        
+        # Verify tracks from fallback are returned
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0]['track']['id'], 'track1')
+        
+        # Verify client was called twice - first with specific fields, then with minimal fields
+        self.assertEqual(mock_client.playlist_tracks.call_count, 2)
+        
+        # Check first call
+        first_call_args = mock_client.playlist_tracks.call_args_list[0][0]
+        first_call_kwargs = mock_client.playlist_tracks.call_args_list[0][1]
+        self.assertEqual(first_call_args[0], 'playlist1')
+        self.assertIn('items(track(id,name,uri,duration_ms,artists(name),album(name,images),external_urls))', first_call_kwargs['fields'])
+        
+        # Check second call (fallback)
+        second_call_args = mock_client.playlist_tracks.call_args_list[1][0]
+        second_call_kwargs = mock_client.playlist_tracks.call_args_list[1][1]
+        self.assertEqual(second_call_args[0], 'playlist1')
+        self.assertEqual(second_call_kwargs['fields'], 'items')
 
 
 if __name__ == '__main__':
