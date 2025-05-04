@@ -19,6 +19,7 @@ class AppUI:
         self.is_authenticated = False
         self.user_info = None
         self.playlists = []
+        self.current_view = "Tiled"  # Default view mode
         
         # Set up the callback route for Spotify OAuth
         self._setup_callback_route()
@@ -328,7 +329,7 @@ class AppUI:
             ui.notify('No playlists found', color='warning')
     
     def _render_playlists(self):
-        """Render the playlists in the UI."""
+        """Render the playlists in the UI based on current view."""
         if not hasattr(self, 'playlist_container'):
             return
             
@@ -336,14 +337,26 @@ class AppUI:
             if not self.playlists:
                 ui.label('No playlists found').classes('text-subtitle1')
                 return
-                
-            # Create a grid layout for playlists
-            with ui.grid(columns=3).classes('w-full gap-4'):
-                for playlist in self.playlists:
-                    self._render_playlist_card(playlist)
+            
+            # Render based on selected view
+            if self.current_view == "Tiled":
+                self._render_tiled_view()
+            else:  # List view
+                self._render_list_view()
+    
+    def _render_tiled_view(self):
+        """Render playlists in a grid tile layout."""
+        with ui.grid(columns=3).classes('w-full gap-4'):
+            for playlist in self.playlists:
+                self._render_playlist_card(playlist)
+    
+    def _render_list_view(self):
+        """Render playlists in a list layout."""
+        for playlist in self.playlists:
+            self._render_playlist_list_item(playlist)
     
     def _render_playlist_card(self, playlist):
-        """Render a single playlist card."""
+        """Render a single playlist card for tiled view."""
         # Get playlist data
         name = playlist.get('name', 'Unnamed Playlist')
         description = playlist.get('description', '')
@@ -373,6 +386,52 @@ class AppUI:
                     ui.label(f"{total_tracks} tracks").classes('text-xs')
                     ui.label(f"By {owner}").classes('text-xs')
     
+    def _render_playlist_list_item(self, playlist):
+        """Render a single playlist as a list item for list view."""
+        # Get playlist data
+        name = playlist.get('name', 'Unnamed Playlist')
+        description = playlist.get('description', '')
+        total_tracks = playlist.get('tracks', {}).get('total', 0)
+        owner = playlist.get('owner', {}).get('display_name', 'Unknown')
+        playlist_id = playlist.get('id', '')
+        
+        # Get the image URL (use the first image if available)
+        image_url = None
+        if playlist.get('images') and len(playlist['images']) > 0:
+            image_url = playlist['images'][0].get('url')
+        
+        # Create a list item with hover effect
+        with ui.card().classes('w-full mb-2 cursor-pointer transition-colors hover:bg-gray-100'):
+            with ui.row().classes('items-center p-2 w-full'):
+                # Image thumbnail (small square)
+                if image_url:
+                    ui.image(image_url).classes('w-12 h-12 mr-4 rounded object-cover')
+                else:
+                    with ui.element('div').classes('w-12 h-12 mr-4 bg-gray-200 flex items-center justify-center rounded'):
+                        ui.icon('music_note', size='md').classes('text-gray-400')
+                
+                # Playlist details
+                with ui.column().classes('flex-grow'):
+                    with ui.row().classes('w-full items-center'):
+                        ui.label(name).classes('font-bold')
+                        if playlist.get('public') is False:
+                            ui.icon('lock', size='xs').classes('text-gray-400 ml-1')
+                    
+                    if description:
+                        ui.label(description).classes('text-xs text-gray-500 line-clamp-1')
+                    
+                    with ui.row().classes('text-xs text-gray-500 mt-1 space-x-2'):
+                        ui.label(f"{total_tracks} tracks")
+                        ui.label('•').classes('text-gray-300 mx-1')
+                        ui.label(f"By {owner}")
+    
+    def _change_view(self, view):
+        """Change the playlist view mode and refresh the display."""
+        self.current_view = view
+        if hasattr(self, 'playlist_container'):
+            self.playlist_container.clear()
+            self._render_playlists()
+    
     def _setup_playlists_tab(self):
         """Set up the content for the playlists tab."""
         with ui.card().classes('w-full'):
@@ -383,10 +442,19 @@ class AppUI:
                 ui.label('Please log in to view your playlists').classes('text-subtitle1')
                 ui.button('Login', icon='login').classes('bg-green-600 text-white').on('click', self._handle_login)
             else:
-                # Add refresh button
-                with ui.row().classes('w-full justify-between items-center'):
-                    ui.label(f"Welcome {self.user_info.get('display_name', 'User')}!").classes('text-subtitle1')
-                    ui.button('Refresh', icon='refresh').on('click', self._fetch_playlists)
+                # Top row with controls
+                with ui.row().classes('w-full justify-end items-center mb-4'):
+                    with ui.row().classes('items-center'):
+                        # View switcher
+                        ui.label('View:').classes('mr-2')
+                        view_select = ui.select(
+                            ['Tiled', 'List'], 
+                            value=self.current_view,
+                            on_change=lambda e: self._change_view(e.value)
+                        ).classes('min-w-[100px]')
+                        
+                        # Refresh button
+                        ui.button('Refresh', icon='refresh').classes('ml-4').on('click', self._fetch_playlists)
                 
                 # Create container for playlists
                 self.playlist_container = ui.element('div').classes('w-full mt-4')
