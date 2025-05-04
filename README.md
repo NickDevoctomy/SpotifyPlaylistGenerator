@@ -1,4 +1,7 @@
 # SpotifyPlaylistGenerator
+
+[![codecov](https://codecov.io/github/NickDevoctomy/SpotifyPlaylistGenerator/graph/badge.svg?token=YK171Q0MP3)](https://codecov.io/github/NickDevoctomy/SpotifyPlaylistGenerator)
+
 A vibe-coded proof-of-concept tool for using AI to generate Spotify playlists.
 
 ## Project Overview
