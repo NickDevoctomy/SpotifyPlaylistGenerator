@@ -86,6 +86,19 @@ python run_tests.py --module tests/unit/test_template_loader.py
 python run_tests.py --html
 ```
 
+### Continuous Integration
+
+This project uses GitHub Actions to automatically run tests on every push to any branch and all pull requests. The workflow configuration can be found in `.github/workflows/python-tests.yml`.
+
+The CI pipeline:
+- Runs on the latest Ubuntu environment
+- Tests with Python 3.11
+- Installs all dependencies
+- Runs the test suite with pytest and generates coverage reports
+- Uploads coverage reports to Codecov
+
+To manually trigger the workflow, you can use the "Run workflow" button in the Actions tab of the GitHub repository.
+
 ### Code Coverage
 Code coverage focuses on backend components. You can generate and view code coverage reports with:
 
