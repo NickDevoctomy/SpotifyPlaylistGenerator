@@ -7,12 +7,25 @@ A NiceGUI-based Python application that allows users to manage their Spotify pla
 ## Features
 - View your Spotify playlists
 - Settings for application configuration
+- Spotify OAuth authentication
 
 ## Setup and Installation
 
 ### Prerequisites
 - Python 3.11
 - Miniconda or Anaconda
+- Spotify Developer Account
+
+### Spotify API Setup
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications)
+2. Create a new application
+3. Set the Redirect URI to `http://127.0.0.1:8080/callback`
+4. Create a `.env` file in the project root with the following variables:
+```
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8080/callback
+```
 
 ### Installation Steps
 

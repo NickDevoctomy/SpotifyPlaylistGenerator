@@ -11,7 +11,7 @@ def main():
     app_ui = AppUI()
     
     # Start the NiceGUI application
-    ui.run(title="Spotify Playlist Generator", port=8080)
+    ui.run(title="Spotify Playlist Generator", port=8080, reload=False)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
