@@ -47,6 +47,55 @@ pip install -r requirements.txt
 python app.py
 ```
 
+## Testing
+
+### Testing Approach
+This project implements unit tests for backend components only. UI components (which use NiceGUI) are excluded from automated testing due to their interactive nature and tight coupling with the NiceGUI framework. 
+
+Key components tested include:
+- `TemplateLoader` - HTML template loading functionality
+- `Track` and `Playlist` models - Data model classes
+- `SpotifyAuthService` - Spotify authentication service
+- `SpotifyService` - Spotify API client service
+- Utility functions in `utils.py`
+
+### Running Tests
+The project includes a testing suite for backend components. To run the tests:
+
+```bash
+# Run all tests
+python run_tests.py
+
+# Run tests with verbose output
+python run_tests.py -v
+
+# Run tests for a specific module
+python run_tests.py --module tests/unit/test_template_loader.py
+
+# Generate HTML coverage report
+python run_tests.py --html
+```
+
+### Code Coverage
+Code coverage focuses on backend components. You can generate and view code coverage reports with:
+
+```bash
+# Generate HTML coverage report for all tests
+python run_tests.py --html
+
+# Generate coverage report for a specific module
+python run_tests.py --html --module tests/unit/test_template_loader.py
+```
+
+The HTML coverage report provides a detailed view of which lines of backend code are covered by tests. The current test suite covers:
+
+- 100% of the `models` package
+- 100% of the `services` package
+- 100% of utility functions in `utils.py`
+- 100% of the `TemplateLoader` class
+
+UI components are excluded from coverage calculations as they are tested manually.
+
 ## Project Structure
 ```
 ├── app.py                  # Main entry point
@@ -58,12 +107,16 @@ python app.py
 │       │   └── app.py      # Main UI application
 │       ├── services/       # Service layer for API interactions
 │       └── models/         # Data models
+├── tests/                  # Test suite
+│   └── unit/               # Unit tests for backend components
 ```
 
 ## Technology Stack
 - Python 3.11
 - NiceGUI - UI framework
 - Spotipy - Spotify API client
+- pytest - Testing framework
+- pytest-cov - Code coverage reporting
 
 ## Guidelines for Future LLM Usage
 
@@ -123,6 +176,12 @@ When working with this codebase:
    - Use type hints for function parameters and return values
    - Document complex logic with clear comments
 
+6. **Testing**
+   - Write unit tests for backend components
+   - Test business logic and utilities thoroughly
+   - UI components are exempt from automated testing requirements
+   - Focus testing efforts on service layers and utility classes
+
 ### Adding New Features
 
 When adding new features:
@@ -130,7 +189,7 @@ When adding new features:
 1. Identify which layer the feature belongs to (UI, service, model)
 2. Create appropriate classes following SOLID principles
 3. Update existing orchestration classes to use the new components
-4. Add appropriate documentation
+4. Add comprehensive unit tests for backend components
 5. Update this README if the feature changes the project structure
 
 By following these guidelines, you'll help maintain a clean, modular, and extensible codebase.
