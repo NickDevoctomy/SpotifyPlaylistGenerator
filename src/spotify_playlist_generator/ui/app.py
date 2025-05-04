@@ -4,7 +4,8 @@ Main application UI for the Spotify Playlist Generator.
 from nicegui import ui, app
 import asyncio
 import webbrowser
-from fastapi.responses import HTMLResponse
+import traceback
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from src.spotify_playlist_generator.services.auth_service import SpotifyAuthService
 
 class AppUI:
@@ -40,127 +41,148 @@ class AppUI:
         async def callback(code: str = ''):
             if code:
                 # Process the authentication in a regular function
-                success = self.auth_service.authenticate(code)
-                if success:
-                    self.is_authenticated = True
-                    self.user_info = self.auth_service.get_user_info()
+                try:
+                    print("Callback received with code, attempting authentication...")
+                    success = self.auth_service.authenticate(code)
                     
-                    # Create a proper HTML response
-                    html_content = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>Authentication Successful</title>
-                        <style>
-                            body {
-                                font-family: Arial, sans-serif;
-                                margin: 0;
-                                padding: 20px;
-                                background-color: #f5f5f5;
-                                color: #333;
-                                text-align: center;
-                            }
-                            .container {
-                                max-width: 600px;
-                                margin: 50px auto;
-                                padding: 20px;
-                                background-color: white;
-                                border-radius: 10px;
-                                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                            }
-                            h1 {
-                                color: #1DB954;
-                            }
-                            .success-icon {
-                                font-size: 48px;
-                                color: #1DB954;
-                                margin-bottom: 20px;
-                            }
-                            .close-countdown {
-                                margin-top: 20px;
-                                font-style: italic;
-                                color: #666;
-                            }
-                        </style>
-                        <script>
-                            window.onload = function() {
-                                var countdown = 3;
-                                var countdownElement = document.getElementById('countdown');
-                                
-                                // Update countdown every second
-                                var interval = setInterval(function() {
-                                    countdown -= 1;
-                                    countdownElement.textContent = countdown;
+                    if success:
+                        self.is_authenticated = True
+                        self.user_info = self.auth_service.get_user_info()
+                        
+                        # Create a proper HTML response
+                        html_content = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Authentication Successful</title>
+                            <style>
+                                body {
+                                    font-family: Arial, sans-serif;
+                                    margin: 0;
+                                    padding: 20px;
+                                    background-color: #f5f5f5;
+                                    color: #333;
+                                    text-align: center;
+                                }
+                                .container {
+                                    max-width: 600px;
+                                    margin: 50px auto;
+                                    padding: 20px;
+                                    background-color: white;
+                                    border-radius: 10px;
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                                }
+                                h1 {
+                                    color: #1DB954;
+                                }
+                                .success-icon {
+                                    font-size: 48px;
+                                    color: #1DB954;
+                                    margin-bottom: 20px;
+                                }
+                                .close-countdown {
+                                    margin-top: 20px;
+                                    font-style: italic;
+                                    color: #666;
+                                }
+                            </style>
+                            <script>
+                                window.onload = function() {
+                                    var countdown = 3;
+                                    var countdownElement = document.getElementById('countdown');
                                     
-                                    if (countdown <= 0) {
-                                        clearInterval(interval);
-                                        window.close();
-                                        // If window doesn't close, redirect to main app
-                                        setTimeout(function() {
-                                            window.location.href = '/';
-                                        }, 500);
-                                    }
-                                }, 1000);
-                            }
-                        </script>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <div class="success-icon">✓</div>
-                            <h1>Authentication Successful!</h1>
-                            <p>You have successfully logged in to Spotify.</p>
-                            <p>You can close this window and return to the application.</p>
-                            <p class="close-countdown">This window will close automatically in <span id="countdown">3</span> seconds...</p>
-                        </div>
-                    </body>
-                    </html>
-                    """
-                    return HTMLResponse(content=html_content)
-                else:
-                    error_html = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>Authentication Failed</title>
-                        <style>
-                            body {
-                                font-family: Arial, sans-serif;
-                                margin: 0;
-                                padding: 20px;
-                                background-color: #f5f5f5;
-                                color: #333;
-                                text-align: center;
-                            }
-                            .container {
-                                max-width: 600px;
-                                margin: 50px auto;
-                                padding: 20px;
-                                background-color: white;
-                                border-radius: 10px;
-                                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                            }
-                            h1 {
-                                color: #e74c3c;
-                            }
-                            .error-icon {
-                                font-size: 48px;
-                                color: #e74c3c;
-                                margin-bottom: 20px;
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <div class="error-icon">✗</div>
-                            <h1>Authentication Failed</h1>
-                            <p>Sorry, we couldn't authenticate you with Spotify.</p>
-                            <p>Please try again or check your credentials.</p>
-                            <p><a href="/">Return to Application</a></p>
-                        </div>
-                    </body>
-                    </html>
-                    """
-                    return HTMLResponse(content=error_html)
+                                    // Update countdown every second
+                                    var interval = setInterval(function() {
+                                        countdown -= 1;
+                                        countdownElement.textContent = countdown;
+                                        
+                                        if (countdown <= 0) {
+                                            clearInterval(interval);
+                                            window.close();
+                                            // If window doesn't close, redirect to main app
+                                            setTimeout(function() {
+                                                window.location.href = '/';
+                                            }, 500);
+                                        }
+                                    }, 1000);
+                                }
+                            </script>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="success-icon">✓</div>
+                                <h1>Authentication Successful!</h1>
+                                <p>You have successfully logged in to Spotify.</p>
+                                <p>You can close this window and return to the application.</p>
+                                <p class="close-countdown">This window will close automatically in <span id="countdown">3</span> seconds...</p>
+                            </div>
+                        </body>
+                        </html>
+                        """
+                        return HTMLResponse(content=html_content)
+                    else:
+                        error_html = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Authentication Failed</title>
+                            <style>
+                                body {
+                                    font-family: Arial, sans-serif;
+                                    margin: 0;
+                                    padding: 20px;
+                                    background-color: #f5f5f5;
+                                    color: #333;
+                                    text-align: center;
+                                }
+                                .container {
+                                    max-width: 600px;
+                                    margin: 50px auto;
+                                    padding: 20px;
+                                    background-color: white;
+                                    border-radius: 10px;
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                                }
+                                h1 {
+                                    color: #e74c3c;
+                                }
+                                .error-icon {
+                                    font-size: 48px;
+                                    color: #e74c3c;
+                                    margin-bottom: 20px;
+                                }
+                                pre {
+                                    text-align: left;
+                                    background-color: #f8f8f8;
+                                    padding: 10px;
+                                    border-radius: 5px;
+                                    overflow: auto;
+                                    font-size: 12px;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="error-icon">✗</div>
+                                <h1>Authentication Failed</h1>
+                                <p>Sorry, we couldn't authenticate you with Spotify.</p>
+                                <p>Please check your Spotify credentials in the environment variables.</p>
+                                <p>See application console for more details.</p>
+                                <p><a href="/">Return to Application</a></p>
+                            </div>
+                        </body>
+                        </html>
+                        """
+                        return HTMLResponse(content=error_html)
+                except Exception as e:
+                    print(f"Exception in callback handler: {str(e)}")
+                    print(traceback.format_exc())
+                    
+                    # Return a plain text response for unexpected errors
+                    return PlainTextResponse(
+                        content=f"Unexpected error during authentication: {str(e)}\n\n"
+                                f"Please restart the application and try again."
+                    )
             else:
                 error_html = """
                 <!DOCTYPE html>
