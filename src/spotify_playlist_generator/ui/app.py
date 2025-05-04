@@ -8,6 +8,8 @@ import traceback
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from src.spotify_playlist_generator.services.auth_service import SpotifyAuthService
 from src.spotify_playlist_generator.services.spotify_service import SpotifyService
+from src.spotify_playlist_generator.ui.template_loader import TemplateLoader
+from src.spotify_playlist_generator.ui.ui_components import PlaylistComponents, CustomStyles
 
 class AppUI:
     """Main UI class that handles the application interface."""
@@ -20,6 +22,9 @@ class AppUI:
         self.user_info = None
         self.playlists = []
         self.current_view = "Tiled"  # Default view mode
+        
+        # Initialize template loader
+        self.template_loader = TemplateLoader()
         
         # Set up the callback route for Spotify OAuth
         self._setup_callback_route()
@@ -56,130 +61,12 @@ class AppUI:
                         # Initialize Spotify service with the authenticated client
                         self.spotify_service = SpotifyService(self.auth_service.get_spotify_client())
                         
-                        # Create a proper HTML response
-                        html_content = """
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <title>Authentication Successful</title>
-                            <style>
-                                body {
-                                    font-family: Arial, sans-serif;
-                                    margin: 0;
-                                    padding: 20px;
-                                    background-color: #f5f5f5;
-                                    color: #333;
-                                    text-align: center;
-                                }
-                                .container {
-                                    max-width: 600px;
-                                    margin: 50px auto;
-                                    padding: 20px;
-                                    background-color: white;
-                                    border-radius: 10px;
-                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                                }
-                                h1 {
-                                    color: #1DB954;
-                                }
-                                .success-icon {
-                                    font-size: 48px;
-                                    color: #1DB954;
-                                    margin-bottom: 20px;
-                                }
-                                .close-countdown {
-                                    margin-top: 20px;
-                                    font-style: italic;
-                                    color: #666;
-                                }
-                            </style>
-                            <script>
-                                window.onload = function() {
-                                    var countdown = 3;
-                                    var countdownElement = document.getElementById('countdown');
-                                    
-                                    // Update countdown every second
-                                    var interval = setInterval(function() {
-                                        countdown -= 1;
-                                        countdownElement.textContent = countdown;
-                                        
-                                        if (countdown <= 0) {
-                                            clearInterval(interval);
-                                            window.close();
-                                            // If window doesn't close, redirect to main app
-                                            setTimeout(function() {
-                                                window.location.href = '/';
-                                            }, 500);
-                                        }
-                                    }, 1000);
-                                }
-                            </script>
-                        </head>
-                        <body>
-                            <div class="container">
-                                <div class="success-icon">✓</div>
-                                <h1>Authentication Successful!</h1>
-                                <p>You have successfully logged in to Spotify.</p>
-                                <p>You can close this window and return to the application.</p>
-                                <p class="close-countdown">This window will close automatically in <span id="countdown">3</span> seconds...</p>
-                            </div>
-                        </body>
-                        </html>
-                        """
+                        # Load the success template
+                        html_content = self.template_loader.load_template('auth_success.html')
                         return HTMLResponse(content=html_content)
                     else:
-                        error_html = """
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <title>Authentication Failed</title>
-                            <style>
-                                body {
-                                    font-family: Arial, sans-serif;
-                                    margin: 0;
-                                    padding: 20px;
-                                    background-color: #f5f5f5;
-                                    color: #333;
-                                    text-align: center;
-                                }
-                                .container {
-                                    max-width: 600px;
-                                    margin: 50px auto;
-                                    padding: 20px;
-                                    background-color: white;
-                                    border-radius: 10px;
-                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                                }
-                                h1 {
-                                    color: #e74c3c;
-                                }
-                                .error-icon {
-                                    font-size: 48px;
-                                    color: #e74c3c;
-                                    margin-bottom: 20px;
-                                }
-                                pre {
-                                    text-align: left;
-                                    background-color: #f8f8f8;
-                                    padding: 10px;
-                                    border-radius: 5px;
-                                    overflow: auto;
-                                    font-size: 12px;
-                                }
-                            </style>
-                        </head>
-                        <body>
-                            <div class="container">
-                                <div class="error-icon">✗</div>
-                                <h1>Authentication Failed</h1>
-                                <p>Sorry, we couldn't authenticate you with Spotify.</p>
-                                <p>Please check your Spotify credentials in the environment variables.</p>
-                                <p>See application console for more details.</p>
-                                <p><a href="/">Return to Application</a></p>
-                            </div>
-                        </body>
-                        </html>
-                        """
+                        # Load the error template
+                        error_html = self.template_loader.load_template('auth_error.html')
                         return HTMLResponse(content=error_html)
                 except Exception as e:
                     print(f"Exception in callback handler: {str(e)}")
@@ -191,50 +78,9 @@ class AppUI:
                                 f"Please restart the application and try again."
                     )
             else:
-                error_html = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>No Code Provided</title>
-                    <style>
-                        body {
-                            font-family: Arial, sans-serif;
-                            margin: 0;
-                            padding: 20px;
-                            background-color: #f5f5f5;
-                            color: #333;
-                            text-align: center;
-                        }
-                        .container {
-                            max-width: 600px;
-                            margin: 50px auto;
-                            padding: 20px;
-                            background-color: white;
-                            border-radius: 10px;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        }
-                        h1 {
-                            color: #f39c12;
-                        }
-                        .warning-icon {
-                            font-size: 48px;
-                            color: #f39c12;
-                            margin-bottom: 20px;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="warning-icon">⚠</div>
-                        <h1>No Authorization Code</h1>
-                        <p>No authorization code was provided.</p>
-                        <p>Please try logging in again.</p>
-                        <p><a href="/">Return to Application</a></p>
-                    </div>
-                </body>
-                </html>
-                """
-                return HTMLResponse(content=error_html)
+                # Load the no-code template
+                no_code_html = self.template_loader.load_template('no_code.html')
+                return HTMLResponse(content=no_code_html)
     
     def setup_header(self):
         """Set up the application header with login button."""
@@ -287,13 +133,7 @@ class AppUI:
         # Create tabs with left alignment
         with ui.tabs().classes('w-full items-start') as tabs:
             # Apply custom styling for left alignment
-            ui.add_head_html('''
-            <style>
-            .q-tabs--horizontal .q-tabs__content {
-                justify-content: flex-start;
-            }
-            </style>
-            ''')
+            CustomStyles.add_left_aligned_tabs_style()
             ui.tab('My Playlists', icon='format_list_bulleted')
             ui.tab('Settings', icon='settings')
         
@@ -348,82 +188,12 @@ class AppUI:
         """Render playlists in a grid tile layout."""
         with ui.grid(columns=3).classes('w-full gap-4'):
             for playlist in self.playlists:
-                self._render_playlist_card(playlist)
+                PlaylistComponents.render_playlist_card(playlist)
     
     def _render_list_view(self):
         """Render playlists in a list layout."""
         for playlist in self.playlists:
-            self._render_playlist_list_item(playlist)
-    
-    def _render_playlist_card(self, playlist):
-        """Render a single playlist card for tiled view."""
-        # Get playlist data
-        name = playlist.get('name', 'Unnamed Playlist')
-        description = playlist.get('description', '')
-        total_tracks = playlist.get('tracks', {}).get('total', 0)
-        owner = playlist.get('owner', {}).get('display_name', 'Unknown')
-        
-        # Get the image URL (use the first image if available)
-        image_url = None
-        if playlist.get('images') and len(playlist['images']) > 0:
-            image_url = playlist['images'][0].get('url')
-        
-        # Create a card for the playlist
-        with ui.card().classes('w-full h-full'):
-            if image_url:
-                ui.image(image_url).classes('w-full aspect-square object-cover')
-            else:
-                # Placeholder for missing image
-                with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center'):
-                    ui.icon('music_note', size='xl').classes('text-gray-400')
-            
-            with ui.card_section():
-                ui.label(name).classes('font-bold text-lg truncate w-full')
-                if description:
-                    ui.label(description).classes('text-xs text-gray-500 h-8 overflow-hidden')
-                
-                with ui.row().classes('items-center justify-between w-full'):
-                    ui.label(f"{total_tracks} tracks").classes('text-xs')
-                    ui.label(f"By {owner}").classes('text-xs')
-    
-    def _render_playlist_list_item(self, playlist):
-        """Render a single playlist as a list item for list view."""
-        # Get playlist data
-        name = playlist.get('name', 'Unnamed Playlist')
-        description = playlist.get('description', '')
-        total_tracks = playlist.get('tracks', {}).get('total', 0)
-        owner = playlist.get('owner', {}).get('display_name', 'Unknown')
-        playlist_id = playlist.get('id', '')
-        
-        # Get the image URL (use the first image if available)
-        image_url = None
-        if playlist.get('images') and len(playlist['images']) > 0:
-            image_url = playlist['images'][0].get('url')
-        
-        # Create a list item with hover effect
-        with ui.card().classes('w-full mb-2 cursor-pointer transition-colors hover:bg-gray-100'):
-            with ui.row().classes('items-center p-2 w-full'):
-                # Image thumbnail (small square)
-                if image_url:
-                    ui.image(image_url).classes('w-12 h-12 mr-4 rounded object-cover')
-                else:
-                    with ui.element('div').classes('w-12 h-12 mr-4 bg-gray-200 flex items-center justify-center rounded'):
-                        ui.icon('music_note', size='md').classes('text-gray-400')
-                
-                # Playlist details
-                with ui.column().classes('flex-grow'):
-                    with ui.row().classes('w-full items-center'):
-                        ui.label(name).classes('font-bold')
-                        if playlist.get('public') is False:
-                            ui.icon('lock', size='xs').classes('text-gray-400 ml-1')
-                    
-                    if description:
-                        ui.label(description).classes('text-xs text-gray-500 line-clamp-1')
-                    
-                    with ui.row().classes('text-xs text-gray-500 mt-1 space-x-2'):
-                        ui.label(f"{total_tracks} tracks")
-                        ui.label('•').classes('text-gray-300 mx-1')
-                        ui.label(f"By {owner}")
+            PlaylistComponents.render_playlist_list_item(playlist)
     
     def _change_view(self, view):
         """Change the playlist view mode and refresh the display."""
