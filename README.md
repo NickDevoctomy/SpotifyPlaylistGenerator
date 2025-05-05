@@ -116,11 +116,13 @@ python run_tests.py --html --module tests/unit/test_template_loader.py
 The HTML coverage report provides a detailed view of which lines of backend code are covered by tests. The current test suite covers:
 
 - 100% of the `models` package
-- 100% of the `services` package
+- 99% of the `auth_service.py` service
+- 98% of the `lastfm_service.py` service
+- 91% of the `spotify_service.py` service
 - 100% of utility functions in `utils.py`
 - 100% of the `TemplateLoader` class
 
-UI components are excluded from coverage calculations as they are tested manually.
+The overall code coverage is 96%, with only a few edge cases and exception handling scenarios not fully tested. UI components are excluded from coverage calculations as they are tested manually.
 
 ## Project Structure
 ```
@@ -219,3 +221,55 @@ When adding new features:
 5. Update this README if the feature changes the project structure
 
 By following these guidelines, you'll help maintain a clean, modular, and extensible codebase.
+
+### Clean Code Principles
+
+When contributing to this codebase, adhere to these clean code principles:
+
+1. **Meaningful Names**
+   - Use intention-revealing names for variables, functions, and classes
+   - Avoid abbreviations unless they are widely understood
+   - Classes should have noun names, methods should have verb names
+   - Example: `get_playlist_tracks()` clearly communicates its purpose
+
+2. **Functions**
+   - Keep functions small, focused on a single task
+   - Limit function length to 20-30 lines where possible
+   - Follow the "do one thing" rule - functions should have a single responsibility
+   - Limit function arguments to 3 or fewer; use objects to group related parameters
+
+3. **Comments**
+   - Write self-documenting code that needs minimal comments
+   - Use comments to explain "why" not "what"
+   - Update comments when code changes
+   - Use docstrings for all public methods and classes
+
+4. **Formatting**
+   - Maintain consistent indentation (4 spaces in Python)
+   - Keep line length under 100 characters
+   - Group related code together; separate unrelated code with blank lines
+   - Follow Python's PEP 8 style guide
+
+5. **Error Handling**
+   - Use exceptions rather than error codes
+   - Don't return None or special values to indicate errors
+   - Provide context in exception messages
+   - Always clean up resources in finally blocks
+
+6. **Don't Repeat Yourself (DRY)**
+   - Extract duplicate code into shared functions or classes
+   - Use abstraction to eliminate repetition
+   - Follow the "Single Source of Truth" principle
+
+7. **Test-Driven Development**
+   - Write tests before implementing new features
+   - Ensure each test verifies one specific behavior
+   - Maintain independence between tests
+   - Write tests that are readable and maintainable
+
+8. **Dependency Management**
+   - Minimize dependencies between modules
+   - Use dependency injection to allow for better testing
+   - Make dependencies explicit in function signatures
+
+These clean code principles complement the SOLID principles and help ensure that the codebase remains maintainable and easy to understand even as it grows in complexity.

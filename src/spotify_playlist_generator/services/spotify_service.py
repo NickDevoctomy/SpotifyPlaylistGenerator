@@ -179,7 +179,25 @@ class SpotifyService:
 
     def get_saved_tracks(self):
         """Get the current user's saved tracks."""
-        return self._paginate_all_items('me/tracks')
+        if not self.client:
+            print("Cannot get saved tracks: No authenticated Spotify client")
+            return []
+            
+        try:
+            # Get initial page of results
+            results = self.client.current_user_saved_tracks(limit=50)
+            tracks = results.get('items', [])
+            
+            # Continue fetching if there are more pages
+            while results.get('next'):
+                results = self.client.next(results)
+                if results and 'items' in results:
+                    tracks.extend(results['items'])
+                    
+            return tracks
+        except Exception as e:
+            print(f"Error fetching saved tracks: {str(e)}")
+            return []
 
     def add_tracks_to_playlist(self, playlist_id, track_uris):
         """

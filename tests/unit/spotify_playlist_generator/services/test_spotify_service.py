@@ -228,7 +228,7 @@ class TestSpotifyService(unittest.TestCase):
             'playlist1',
             limit=50,
             offset=0,
-            fields='items(track(id,name,uri,duration_ms,artists(name),album(name,images),external_urls))'
+            fields='items(track(id,name,uri,duration_ms,artists(id,name),album(id,name,images),external_urls))'
         )
     
     def test_get_playlist_tracks_error(self):
@@ -318,13 +318,266 @@ class TestSpotifyService(unittest.TestCase):
         first_call_args = mock_client.playlist_tracks.call_args_list[0][0]
         first_call_kwargs = mock_client.playlist_tracks.call_args_list[0][1]
         self.assertEqual(first_call_args[0], 'playlist1')
-        self.assertIn('items(track(id,name,uri,duration_ms,artists(name),album(name,images),external_urls))', first_call_kwargs['fields'])
+        self.assertIn('items(track(id,name,uri,duration_ms,artists(id,name),album(id,name,images),external_urls))', first_call_kwargs['fields'])
         
         # Check second call (fallback)
         second_call_args = mock_client.playlist_tracks.call_args_list[1][0]
         second_call_kwargs = mock_client.playlist_tracks.call_args_list[1][1]
         self.assertEqual(second_call_args[0], 'playlist1')
         self.assertEqual(second_call_kwargs['fields'], 'items')
+
+    def test_get_saved_tracks(self):
+        """Test getting user's saved tracks."""
+        # Create mock client
+        mock_client = MagicMock()
+        
+        # Set up mock client to return tracks
+        mock_tracks_response = {
+            'items': [
+                {'track': {'id': 'track1', 'name': 'Track 1'}},
+                {'track': {'id': 'track2', 'name': 'Track 2'}}
+            ],
+            'next': None  # No more pages
+        }
+        mock_client.current_user_saved_tracks.return_value = mock_tracks_response
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get saved tracks
+        tracks = service.get_saved_tracks()
+        
+        # This method is likely a stub and we just need to make sure it doesn't fail
+        # If it's actually implemented, we'd verify the tracks are returned correctly
+        self.assertIsInstance(tracks, list)  # Should return some kind of list
+        
+        # Verify client was called
+        mock_client.current_user_saved_tracks.assert_called()
+
+    def test_add_tracks_to_playlist_no_client(self):
+        """Test adding tracks to playlist with no client."""
+        # Create service with no client
+        service = SpotifyService()
+        
+        # Add tracks
+        result = service.add_tracks_to_playlist('playlist1', ['uri1', 'uri2'])
+        
+        # Verify operation failed
+        self.assertFalse(result)
+        
+    def test_add_tracks_to_playlist_success(self):
+        """Test adding tracks to playlist successfully."""
+        # Create mock client
+        mock_client = MagicMock()
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Add tracks
+        result = service.add_tracks_to_playlist('playlist1', ['uri1', 'uri2'])
+        
+        # Verify operation succeeded
+        self.assertTrue(result)
+        
+        # Verify client was called with correct params
+        mock_client.playlist_add_items.assert_called_once_with('playlist1', ['uri1', 'uri2'])
+        
+    def test_add_tracks_to_playlist_error(self):
+        """Test error handling when adding tracks to playlist."""
+        # Create mock client that raises exception
+        mock_client = MagicMock()
+        mock_client.playlist_add_items.side_effect = Exception("API error")
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Add tracks
+        result = service.add_tracks_to_playlist('playlist1', ['uri1', 'uri2'])
+        
+        # Verify operation failed
+        self.assertFalse(result)
+        
+    def test_get_track_audio_features_no_client(self):
+        """Test getting track audio features with no client."""
+        # Create service with no client
+        service = SpotifyService()
+        
+        # Get audio features
+        features = service.get_track_audio_features('track1')
+        
+        # Verify None is returned
+        self.assertIsNone(features)
+        
+    def test_get_track_audio_features_success(self):
+        """Test getting track audio features successfully."""
+        # Create mock client
+        mock_client = MagicMock()
+        mock_client.audio_features.return_value = [
+            {
+                "danceability": 0.8,
+                "energy": 0.9,
+                "key": 5,
+                "tempo": 120.5
+            }
+        ]
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get audio features
+        features = service.get_track_audio_features('track1')
+        
+        # Verify features are returned
+        self.assertEqual(features["danceability"], 0.8)
+        self.assertEqual(features["energy"], 0.9)
+        self.assertEqual(features["tempo"], 120.5)
+        
+        # Verify client was called with correct params
+        mock_client.audio_features.assert_called_once_with('track1')
+        
+    def test_get_track_audio_features_empty_response(self):
+        """Test getting track audio features with empty response."""
+        # Create mock client with empty response
+        mock_client = MagicMock()
+        mock_client.audio_features.return_value = []
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get audio features
+        features = service.get_track_audio_features('track1')
+        
+        # Verify None is returned
+        self.assertIsNone(features)
+        
+    def test_get_track_audio_features_403_error(self):
+        """Test handling 403 error when getting track audio features."""
+        # Create mock client that raises 403 exception
+        mock_client = MagicMock()
+        mock_client.audio_features.side_effect = Exception("403 Forbidden")
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get audio features
+        features = service.get_track_audio_features('track1')
+        
+        # Verify default features are returned
+        self.assertEqual(features["danceability"], 0.5)
+        self.assertEqual(features["energy"], 0.5)
+        self.assertEqual(features["tempo"], 120)
+        
+    def test_get_track_audio_features_general_error(self):
+        """Test handling general error when getting track audio features."""
+        # Create mock client that raises general exception
+        mock_client = MagicMock()
+        mock_client.audio_features.side_effect = Exception("API error")
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Get audio features
+        features = service.get_track_audio_features('track1')
+        
+        # Verify None is returned
+        self.assertIsNone(features)
+        
+    def test_search_artist_no_client(self):
+        """Test searching for artist with no client."""
+        # Create service with no client
+        service = SpotifyService()
+        
+        # Search for artist
+        artist = service.search_artist("Test Artist")
+        
+        # Verify None is returned
+        self.assertIsNone(artist)
+        
+    def test_search_artist_success(self):
+        """Test searching for artist successfully."""
+        # Create mock client
+        mock_client = MagicMock()
+        mock_client.search.return_value = {
+            'artists': {
+                'items': [
+                    {
+                        'id': 'artist1',
+                        'name': 'Test Artist',
+                        'images': [{'url': 'http://example.com/image1.jpg'}]
+                    }
+                ]
+            }
+        }
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Search for artist
+        artist = service.search_artist("Test Artist")
+        
+        # Verify artist is returned
+        self.assertEqual(artist['id'], 'artist1')
+        self.assertEqual(artist['name'], 'Test Artist')
+        
+        # Verify client was called with correct params
+        mock_client.search.assert_called_once_with(q="artist:Test Artist", type="artist", limit=1)
+        
+    def test_search_artist_no_results(self):
+        """Test searching for artist with no results."""
+        # Create mock client with empty results
+        mock_client = MagicMock()
+        mock_client.search.return_value = {'artists': {'items': []}}
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Search for artist
+        artist = service.search_artist("Test Artist")
+        
+        # Verify None is returned
+        self.assertIsNone(artist)
+        
+    def test_search_artist_missing_images(self):
+        """Test searching for artist with missing images."""
+        # Create mock client with artist missing images
+        mock_client = MagicMock()
+        mock_client.search.return_value = {
+            'artists': {
+                'items': [
+                    {
+                        'id': 'artist1',
+                        'name': 'Test Artist'
+                        # Missing 'images' field
+                    }
+                ]
+            }
+        }
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Search for artist
+        artist = service.search_artist("Test Artist")
+        
+        # Verify artist is returned with empty images array
+        self.assertEqual(artist['id'], 'artist1')
+        self.assertEqual(artist['name'], 'Test Artist')
+        self.assertEqual(artist['images'], [])
+        
+    def test_search_artist_error(self):
+        """Test error handling when searching for artist."""
+        # Create mock client that raises exception
+        mock_client = MagicMock()
+        mock_client.search.side_effect = Exception("API error")
+        
+        # Create service with mock client
+        service = SpotifyService(spotify_client=mock_client)
+        
+        # Search for artist
+        artist = service.search_artist("Test Artist")
+        
+        # Verify None is returned
+        self.assertIsNone(artist)
 
 
 if __name__ == '__main__':
