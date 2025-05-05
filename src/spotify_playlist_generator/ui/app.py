@@ -582,16 +582,6 @@ class AppUI:
                         if track_url:
                             with ui.link(target=track_url, new_tab=True).classes('no-underline'):
                                 ui.button('Open in Spotify', icon='open_in_new').classes('bg-green-600 text-white')
-                        
-                        if track_url:
-                            ui.button('Play', icon='play_arrow').on('click', lambda: self._play_track(track_url)).classes('bg-green-600 text-white')
-                
-                # Track title
-                ui.label(track_name).classes('text-h4 mt-4')
-                
-                # Artist and album info
-                ui.label(f"Artist: {artist_display}").classes('text-h6')
-                ui.label(f"Album: {album_name}").classes('text-body1 mb-4')
                 
                 # Track content with album art and details
                 with ui.row().classes('w-full gap-6 mb-6 items-start'):
@@ -603,22 +593,19 @@ class AppUI:
                             ui.icon('music_note', size='xl').classes('text-gray-400')
                     
                     # Track details
-                    with ui.column().classes('flex-grow gap-3'):
-                        # Additional track details in cards
-                        with ui.row().classes('gap-4 mt-2'):
-                            with ui.card().classes('p-3 bg-gray-50'):
-                                ui.label('Duration').classes('text-xs text-gray-500')
-                                ui.label(duration).classes('text-base font-bold')
-                                
-                            if 'popularity' in track:
-                                with ui.card().classes('p-3 bg-gray-50'):
-                                    ui.label('Popularity').classes('text-xs text-gray-500')
-                                    ui.label(f"{track.get('popularity')}/100").classes('text-base font-bold')
-                            
-                            if isinstance(album, dict) and 'release_date' in album:
-                                with ui.card().classes('p-3 bg-gray-50'):
-                                    ui.label('Released').classes('text-xs text-gray-500')
-                                    ui.label(album.get('release_date')).classes('text-base font-bold')
+                    with ui.column().classes('flex-grow gap-2 ml-2'):
+                        ui.label(track_name).classes('text-h4 font-bold')
+                        ui.label(f"Artist: {artist_display}").classes('text-h6')
+                        ui.label(f"Album: {album_name}").classes('text-lg')
+                        ui.label(f"Duration: {duration}").classes('text-body1')
+                        
+                        # Optional popularity badge if available
+                        if 'popularity' in track:
+                            ui.label(f"Popularity: {track.get('popularity')}/100").classes('text-body2 text-gray-700')
+                        
+                        # Optional release date if available
+                        if isinstance(album, dict) and 'release_date' in album:
+                            ui.label(f"Released: {album.get('release_date')}").classes('text-body2 text-gray-700')
                 
                 # Audio features section if available
                 audio_features = None
@@ -718,20 +705,6 @@ class AppUI:
             # If no playlist context, go back to the main playlists view
             self._back_to_playlists()
     
-    def _play_track(self, track_url):
-        """
-        Play a track by opening its URL in a new browser tab.
-        
-        Args:
-            track_url (str): The Spotify URL for the track
-        """
-        if track_url:
-            import webbrowser
-            webbrowser.open(track_url)
-            ui.notify('Opening track in Spotify...', color='positive')
-        else:
-            ui.notify('Unable to play track: No URL available', color='negative')
-            
     def _get_dummy_similar_artists(self, artist_id):
         """
         Return hard-coded dummy similar artists instead of calling the Spotify API.
