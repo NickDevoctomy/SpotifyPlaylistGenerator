@@ -30,6 +30,7 @@ class AppUI:
         self.created_tabs = set()  # Track which tabs have been created
         self.playlist_tracks_cache = {}  # Cache tracks for each playlist
         self.initial_load_complete = False  # Flag to track if initial load has happened
+        self.dark_mode = True  # Default to dark theme
         
         # Initialize template loader
         self.template_loader = TemplateLoader()
@@ -46,10 +47,47 @@ class AppUI:
         # Set up the main page
         self._setup_main_page()
     
+    def _toggle_theme(self):
+        """Toggle between light and dark theme."""
+        # Toggle the dark mode state 
+        self.dark_mode = not self.dark_mode
+        
+        # Store theme preference in local storage for persistence across refreshes
+        ui.run_javascript(f"""
+            localStorage.setItem('spotify_theme_preference', '{str(self.dark_mode).lower()}');
+            // Reload page to apply theme completely
+            setTimeout(() => window.location.reload(), 300);
+        """)
+        
+        # Apply the theme change
+        ui.dark_mode().set_value(self.dark_mode)
+        
+        # Update button icon
+        self.theme_button.icon = 'dark_mode' if self.dark_mode else 'light_mode'
+        
+        # Show notification
+        theme_name = "Dark" if self.dark_mode else "Light"
+        ui.notify(f"{theme_name} theme applied", color="info")
+    
     def _setup_main_page(self):
         """Set up the main application page."""
         @ui.page('/')
         def main_page():
+            # Apply localStorage theme preference if exists (client-side)
+            ui.run_javascript("""
+                const storedTheme = localStorage.getItem('spotify_theme_preference');
+                if (storedTheme === 'false') {
+                    // Light mode
+                    nicegui.darkMode.value = false;
+                } else {
+                    // Dark mode (default)
+                    nicegui.darkMode.value = true;
+                }
+            """)
+            
+            # Initialize with current theme setting
+            ui.dark_mode().set_value(self.dark_mode)
+            
             self.setup_header()
             self.setup_tabs()
     
@@ -94,6 +132,22 @@ class AppUI:
         """Set up the application header with login button."""
         with ui.header().classes('items-center'):
             ui.label('Spotify Playlist Generator').classes('text-h5 flex-grow')
+            
+            # Add theme toggle button - icon will be updated via JavaScript after UI is built
+            self.theme_button = ui.button(icon='dark_mode').classes('mr-2').tooltip('Toggle theme')
+            self.theme_button.on('click', self._toggle_theme)
+            
+            # Update button icon based on localStorage theme preference
+            ui.run_javascript("""
+                const storedTheme = localStorage.getItem('spotify_theme_preference');
+                if (storedTheme === 'false') {
+                    // Update to light mode icon
+                    document.querySelector('[id^=button-].mr-2 .material-icons').innerText = 'light_mode';
+                } else {
+                    // Update to dark mode icon (default)
+                    document.querySelector('[id^=button-].mr-2 .material-icons').innerText = 'dark_mode';
+                }
+            """)
             
             # Create login button
             self.login_button = ui.button('Login', icon='login').classes('bg-green-600 text-white')
