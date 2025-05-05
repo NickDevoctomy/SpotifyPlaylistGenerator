@@ -25,8 +25,10 @@ class AppUI:
         self.playlist_tabs = None
         self.playlist_tab_panels = None
         self.selected_playlist = None
+        self.selected_track = None
         self.created_tabs = set()  # Track which tabs have been created
         self.playlist_tracks_cache = {}  # Cache tracks for each playlist
+        self.initial_load_complete = False  # Flag to track if initial load has happened
         
         # Initialize template loader
         self.template_loader = TemplateLoader()
@@ -152,41 +154,59 @@ class AppUI:
     def _fetch_playlists(self):
         """Fetch user's playlists from Spotify."""
         if not self.is_authenticated or not self.spotify_service:
+            print("[DEBUG APP] Not authenticated or no spotify service, cannot fetch playlists")
             return
         
+        print("[DEBUG APP] Fetching playlists from Spotify...")
         ui.notify('Fetching your playlists...', color='info')
         
         # Clear existing playlists
         self.playlists = []
         
-        # Get playlists from Spotify
-        self.playlists = self.spotify_service.get_user_playlists()
-        
-        # Update UI
-        if hasattr(self, 'playlist_container'):
-            self.playlist_container.clear()
-            self._render_playlists()
+        try:
+            # Get playlists from Spotify
+            self.playlists = self.spotify_service.get_user_playlists()
+            print(f"[DEBUG APP] Retrieved {len(self.playlists)} playlists from Spotify")
             
-        # Show success message
-        if self.playlists:
-            ui.notify(f'Found {len(self.playlists)} playlists', color='positive')
-        else:
-            ui.notify('No playlists found', color='warning')
+            # Update UI
+            if hasattr(self, 'playlist_container'):
+                print("[DEBUG APP] Clearing and updating playlist container")
+                self.playlist_container.clear()
+                self._render_playlists()
+            else:
+                print("[DEBUG APP] No playlist container found to update")
+                
+            # Show success message
+            if self.playlists:
+                ui.notify(f'Found {len(self.playlists)} playlists', color='positive')
+            else:
+                ui.notify('No playlists found', color='warning')
+                
+        except Exception as e:
+            print(f"[DEBUG APP] Error fetching playlists: {str(e)}")
+            ui.notify(f'Error fetching playlists: {str(e)}', color='negative')
+            import traceback
+            print(f"[DEBUG APP] Error traceback: {traceback.format_exc()}")
     
     def _render_playlists(self):
         """Render the playlists in the UI based on current view."""
         if not hasattr(self, 'playlist_container'):
+            print("[DEBUG APP] No playlist container exists to render playlists")
             return
             
+        print(f"[DEBUG APP] Rendering {len(self.playlists)} playlists in {self.current_view} view")
         with self.playlist_container:
             if not self.playlists:
+                print("[DEBUG APP] No playlists to render, showing empty message")
                 ui.label('No playlists found').classes('text-subtitle1')
                 return
             
             # Render based on selected view
             if self.current_view == "Tiled":
+                print("[DEBUG APP] Rendering tiled view")
                 self._render_tiled_view()
             else:  # List view
+                print("[DEBUG APP] Rendering list view")
                 self._render_list_view()
     
     def _render_tiled_view(self):
@@ -263,13 +283,13 @@ class AppUI:
                             self.playlist_tracks_cache[playlist_id] = tracks
                     except Exception as e:
                         print(f"[DEBUG APP] Error auto-loading tracks: {str(e)}")
-                        # Fall back to test tracks if API fails
-                        tracks = self._get_test_tracks()
-                        print(f"[DEBUG APP] Using {len(tracks)} test tracks as fallback")
+                        # Simply log the error and return empty tracks
+                        tracks = []
+                        print(f"[DEBUG APP] Using empty track list due to error")
                 else:
-                    # Use test tracks if not authenticated
-                    tracks = self._get_test_tracks()
-                    print(f"[DEBUG APP] Using {len(tracks)} test tracks (not authenticated)")
+                    # Not authenticated, empty tracks
+                    tracks = []
+                    print(f"[DEBUG APP] Using empty track list (not authenticated)")
             
             # Now render the playlist detail with the tracks
             with self.playlist_tab_panels:
@@ -278,7 +298,8 @@ class AppUI:
                     PlaylistComponents.render_playlist_detail(
                         playlist, 
                         tracks=tracks,  # Pass the tracks directly
-                        on_back=self._back_to_playlists
+                        on_back=self._back_to_playlists,
+                        on_track_click=self._open_track_detail
                     )
         else:
             # Tab already exists, just update it if needed
@@ -337,8 +358,17 @@ class AppUI:
                         # Create container for playlists
                         self.playlist_container = ui.element('div').classes('w-full mt-4')
                         
-                        # Initial load of playlists
-                        self._fetch_playlists()
+                        # Initial load of playlists - ensure we load playlists if authenticated
+                        if self.is_authenticated:
+                            if not self.playlists or not self.initial_load_complete:
+                                print("[DEBUG APP] Scheduling initial playlist fetch...")
+                                # Use a short timer to ensure UI is fully initialized
+                                ui.timer(0.2, lambda: self._fetch_playlists(), once=True)
+                                self.initial_load_complete = True
+                            else:
+                                # If we already have playlists, just render them
+                                print(f"[DEBUG APP] Using {len(self.playlists)} existing playlists")
+                                self._render_playlists()
     
     def _setup_settings_tab(self):
         """Set up the content for the settings tab."""
@@ -390,10 +420,8 @@ class AppUI:
                     self.playlist_tracks_cache[playlist_id] = tracks
                     print(f"[DEBUG APP] Cached {len(tracks)} tracks for playlist {playlist_id}")
                 else:
-                    print("[DEBUG APP] No tracks returned from API, trying fallback")
-                    # Create test tracks as fallback for debugging
-                    tracks = self._get_test_tracks()
-                    print(f"[DEBUG APP] Created {len(tracks)} test tracks as fallback")
+                    print("[DEBUG APP] No tracks returned from API")
+                    tracks = []
                 
                 # Dump full raw data of the first few tracks for debugging
                 if tracks:
@@ -414,10 +442,7 @@ class AppUI:
                 print(f"[DEBUG APP] Error loading tracks: {str(e)}")
                 import traceback
                 print(f"[DEBUG APP] Error traceback: {traceback.format_exc()}")
-                
-                # Create test tracks as fallback for debugging
-                tracks = self._get_test_tracks()
-                print(f"[DEBUG APP] Created {len(tracks)} test tracks as fallback after error")
+                tracks = []
         
         # Find the tab panel to update
         tab_id = f"playlist-{playlist_id}"
@@ -440,7 +465,8 @@ class AppUI:
                         PlaylistComponents.render_playlist_detail(
                             playlist,
                             tracks=tracks,
-                            on_back=self._back_to_playlists
+                            on_back=self._back_to_playlists,
+                            on_track_click=self._open_track_detail
                         )
                     else:
                         print(f"[DEBUG APP] Could not find playlist with ID {playlist_id} in the loaded playlists")
@@ -455,51 +481,350 @@ class AppUI:
         else:
             ui.notify('No tracks found in this playlist', color='warning')
     
-    def _get_test_tracks(self):
-        """Create test track data for debugging purposes."""
-        print("[DEBUG APP] Creating test tracks for debugging")
+    def _open_track_detail(self, track_data):
+        """Open the track detail view in a new tab."""
+        if not track_data:
+            ui.notify('Unable to open track: No track data provided', color='negative')
+            return
+            
+        print(f"[DEBUG APP] Opening track detail: {type(track_data)}")
         
-        # Simple test tracks with minimal required fields
-        test_tracks = [
+        # Dump track data for debugging
+        import json
+        print("\n[DEBUG APP] ======= TRACK DATA DUMP ========")
+        try:
+            print(json.dumps(track_data, indent=2))
+        except:
+            print(f"[DEBUG APP] Unable to JSON serialize track_data")
+        print("[DEBUG APP] ======= END TRACK DATA DUMP ========\n")
+        
+        # Extract track data
+        track = track_data.get('track', {}) if 'track' in track_data else track_data
+        track_id = track.get('id', '')
+        
+        if not track_id:
+            ui.notify('Unable to open track: Missing track ID', color='negative')
+            return
+        
+        # Store selected track for reference
+        self.selected_track = track_data
+        
+        # Create the tab ID
+        tab_id = f"track-{track_id}"
+        
+        # Basic info
+        track_name = track.get('name', 'Unknown Track')
+        artist_display = self._get_artist_display(track)
+        album = track.get('album', {})
+        album_name = album.get('name', 'Unknown Album') if isinstance(album, dict) else 'Unknown Album'
+        
+        # Get album image
+        album_image = None
+        if isinstance(album, dict) and 'images' in album and album['images']:
+            images = album.get('images', [])
+            if images and len(images) > 0 and isinstance(images[0], dict):
+                album_image = images[0].get('url')
+        
+        # Get track URL
+        track_url = None
+        ext_urls = track.get('external_urls', {})
+        if isinstance(ext_urls, dict) and 'spotify' in ext_urls:
+            track_url = ext_urls.get('spotify')
+        elif track_id:
+            track_url = f"https://open.spotify.com/track/{track_id}"
+        
+        # Duration calculation
+        duration_ms = int(track.get('duration_ms', 0))
+        minutes = duration_ms // 60000
+        seconds = (duration_ms % 60000) // 1000
+        duration = f"{minutes}:{seconds:02d}"
+        
+        # Check if the tab already exists and remove it if it does
+        if tab_id in self.created_tabs:
+            # Find and remove the existing tab
+            print(f"[DEBUG APP] Tab {tab_id} already exists, removing it")
+            # Remove from UI tabs
+            tabs_to_keep = []
+            for tab in self.playlist_tabs.children:
+                if hasattr(tab, 'value') and tab.value == tab_id:
+                    continue
+                tabs_to_keep.append(tab)
+                
+            # Clear and rebuild tabs
+            self.playlist_tabs.clear()
+            with self.playlist_tabs:
+                for tab in tabs_to_keep:
+                    ui.component(tab)
+                # Re-create the tab
+                ui.tab(tab_id, track_name).props('no-caps')
+                
+            # Remove from tab panels
+            for child in self.playlist_tab_panels.children:
+                if hasattr(child, 'value') and child.value == tab_id:
+                    child.clear()
+        else:
+            # Create new tab if it doesn't exist
+            with self.playlist_tabs:
+                ui.tab(tab_id, track_name).props('no-caps')
+                self.created_tabs.add(tab_id)
+        
+        # Create tab panel with full content
+        with self.playlist_tab_panels:
+            with ui.tab_panel(tab_id).classes('p-4'):
+                # Track header with album art and details
+                with ui.row().classes('w-full justify-between items-start mb-6'):
+                    # Left side: Back button
+                    back_text = "Back to Playlist" if self.selected_playlist else "Back"
+                    ui.button(back_text, icon='arrow_back').on('click', self._handle_back_from_track).classes('bg-blue-500 text-white')
+                    
+                    # Right side: Action buttons
+                    with ui.row().classes('gap-2'):
+                        if track_url:
+                            with ui.link(target=track_url, new_tab=True).classes('no-underline'):
+                                ui.button('Open in Spotify', icon='open_in_new').classes('bg-green-600 text-white')
+                        
+                        if track_url:
+                            ui.button('Play', icon='play_arrow').on('click', lambda: self._play_track(track_url)).classes('bg-green-600 text-white')
+                
+                # Track title
+                ui.label(track_name).classes('text-h4 mt-4')
+                
+                # Artist and album info
+                ui.label(f"Artist: {artist_display}").classes('text-h6')
+                ui.label(f"Album: {album_name}").classes('text-body1 mb-4')
+                
+                # Track content with album art and details
+                with ui.row().classes('w-full gap-6 mb-6 items-start'):
+                    # Album image - larger size
+                    if album_image:
+                        ui.image(album_image).classes('w-56 h-56 object-cover rounded-lg shadow')
+                    else:
+                        with ui.element('div').classes('w-56 h-56 bg-gray-200 flex items-center justify-center rounded-lg shadow'):
+                            ui.icon('music_note', size='xl').classes('text-gray-400')
+                    
+                    # Track details
+                    with ui.column().classes('flex-grow gap-3'):
+                        # Additional track details in cards
+                        with ui.row().classes('gap-4 mt-2'):
+                            with ui.card().classes('p-3 bg-gray-50'):
+                                ui.label('Duration').classes('text-xs text-gray-500')
+                                ui.label(duration).classes('text-base font-bold')
+                                
+                            if 'popularity' in track:
+                                with ui.card().classes('p-3 bg-gray-50'):
+                                    ui.label('Popularity').classes('text-xs text-gray-500')
+                                    ui.label(f"{track.get('popularity')}/100").classes('text-base font-bold')
+                            
+                            if isinstance(album, dict) and 'release_date' in album:
+                                with ui.card().classes('p-3 bg-gray-50'):
+                                    ui.label('Released').classes('text-xs text-gray-500')
+                                    ui.label(album.get('release_date')).classes('text-base font-bold')
+                
+                # Audio features section if available
+                audio_features = None
+                if track_id:
+                    audio_features = self._get_track_audio_features(track_id)
+                    
+                if audio_features:
+                    ui.separator().classes('my-4')
+                    ui.label("Audio Features").classes('text-h6 mb-4')
+                    
+                    # Display audio features in a grid of cards
+                    with ui.grid(columns=4).classes('w-full gap-4 mb-6'):
+                        # Features to display
+                        features = [
+                            ('Danceability', audio_features.get('danceability', 0), 'emoji_emotions'),
+                            ('Energy', audio_features.get('energy', 0), 'bolt'),
+                            ('Acousticness', audio_features.get('acousticness', 0), 'acoustic_detector'),
+                            ('Instrumentalness', audio_features.get('instrumentalness', 0), 'piano'),
+                            ('Liveness', audio_features.get('liveness', 0), 'mic'),
+                            ('Valence', audio_features.get('valence', 0), 'sentiment_satisfied'),
+                            ('Speechiness', audio_features.get('speechiness', 0), 'record_voice_over'),
+                            ('Tempo', audio_features.get('tempo', 0), 'speed', False)
+                        ]
+                        
+                        for feature in features:
+                            name, value, icon, *args = feature
+                            is_percent = len(args) == 0 or args[0]  # Default is True if not specified
+                            
+                            with ui.card().classes('p-4 bg-gray-50'):
+                                with ui.row().classes('items-center w-full gap-2'):
+                                    ui.icon(icon).classes('text-blue-500')
+                                    ui.label(name).classes('text-sm font-bold')
+                                
+                                if is_percent:
+                                    # For percentage values (0-1)
+                                    percentage = int(value * 100)
+                                    with ui.linear_progress(value=value).classes('w-full my-2'):
+                                        pass
+                                    ui.label(f"{percentage}%").classes('text-right w-full text-sm')
+                                else:
+                                    # For non-percentage values (like tempo)
+                                    ui.label(f"{value:.1f}").classes('text-xl font-bold mt-2')
+                
+                # Similar Artists section (always shown with hardcoded data)
+                ui.separator().classes('my-4')
+                ui.label("Similar Artists").classes('text-h6 mb-4')
+                
+                # Always use hardcoded similar artists
+                similar_artists = self._get_dummy_similar_artists('any-id')  # Just pass a placeholder
+                
+                if similar_artists:
+                    with ui.grid(columns=5).classes('w-full gap-4'):
+                        for artist in similar_artists[:5]:
+                            with ui.card().classes('p-3 hover:bg-gray-50'):
+                                artist_name = artist.get('name', 'Unknown')
+                                artist_id = artist.get('id', '')
+                                artist_url = f"https://open.spotify.com/artist/{artist_id}" if artist_id else None
+                                
+                                # Artist image
+                                artist_image = None
+                                if 'images' in artist and artist['images'] and len(artist['images']) > 0:
+                                    artist_image = artist['images'][0].get('url')
+                                
+                                if artist_image:
+                                    ui.image(artist_image).classes('w-full aspect-square object-cover rounded-full')
+                                else:
+                                    with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center rounded-full'):
+                                        ui.icon('person').classes('text-gray-400')
+                                        
+                                # Artist name with link
+                                if artist_url:
+                                    with ui.link(target=artist_url, new_tab=True).classes('no-underline'):
+                                        ui.label(artist_name).classes('text-center text-sm mt-2 text-blue-600 hover:underline')
+                                else:
+                                    ui.label(artist_name).classes('text-center text-sm mt-2')
+                else:
+                    ui.label("No similar artists available").classes('text-gray-500')
+        
+        # Now switch to the tab
+        self.playlist_tabs.set_value(tab_id)
+        print(f"[DEBUG APP] Track detail tab created and populated")
+    
+    def _get_artist_display(self, track):
+        """Helper to get artist display string from track data."""
+        artists = track.get('artists', [])
+        artist_names = [a.get('name', '') for a in artists if isinstance(a, dict) and 'name' in a]
+        return ', '.join(artist_names) if artist_names else 'Unknown Artist'
+    
+    def _handle_back_from_track(self):
+        """Go back to the playlist detail view."""
+        if self.selected_playlist:
+            # Switch back to the playlist tab
+            self.playlist_tabs.value = f"playlist-{self.selected_playlist['id']}"
+            # Clear the selected track
+            self.selected_track = None
+        else:
+            # If no playlist context, go back to the main playlists view
+            self._back_to_playlists()
+    
+    def _play_track(self, track_url):
+        """
+        Play a track by opening its URL in a new browser tab.
+        
+        Args:
+            track_url (str): The Spotify URL for the track
+        """
+        if track_url:
+            import webbrowser
+            webbrowser.open(track_url)
+            ui.notify('Opening track in Spotify...', color='positive')
+        else:
+            ui.notify('Unable to play track: No URL available', color='negative')
+            
+    def _get_dummy_similar_artists(self, artist_id):
+        """
+        Return hard-coded dummy similar artists instead of calling the Spotify API.
+        
+        Args:
+            artist_id (str): Artist ID (unused, just for interface compatibility)
+            
+        Returns:
+            list: A list of dummy artist objects
+        """
+        print(f"[DEBUG APP] Generating dummy similar artists (artist_id: {artist_id})")
+        
+        # Hard-coded dummy data with the same structure as Spotify API response
+        dummy_artists = [
             {
-                "track": {
-                    "id": "test1",
-                    "name": "Test Track 1",
-                    "uri": "spotify:track:test1",
-                    "artists": [{"name": "Test Artist 1"}],
-                    "album": {
-                        "name": "Test Album 1",
-                        "images": [{"url": "https://via.placeholder.com/300"}]
-                    },
-                    "external_urls": {"spotify": "https://open.spotify.com/track/test1"}
-                }
+                "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                "name": "Daft Punk",
+                "images": [
+                    {
+                        "url": "https://i.scdn.co/image/ab6761610000e5eb8b9b5ce15d72215db8e35fbd",
+                        "width": 640,
+                        "height": 640
+                    }
+                ]
             },
             {
-                "track": {
-                    "id": "test2",
-                    "name": "Test Track 2",
-                    "uri": "spotify:track:test2",
-                    "artists": [{"name": "Test Artist 2"}],
-                    "album": {
-                        "name": "Test Album 2",
-                        "images": [{"url": "https://via.placeholder.com/300"}]
-                    },
-                    "external_urls": {"spotify": "https://open.spotify.com/track/test2"}
-                }
+                "id": "5INjqkS1o8h1imAzPqGZBb",
+                "name": "Tame Impala",
+                "images": [
+                    {
+                        "url": "https://i.scdn.co/image/ab6761610000e5eb5d2b407da59dcc18e7c04c04", 
+                        "width": 640, 
+                        "height": 640
+                    }
+                ]
             },
             {
-                "track": {
-                    "id": "test3",
-                    "name": "Test Track 3",
-                    "uri": "spotify:track:test3",
-                    "artists": [{"name": "Test Artist 3"}],
-                    "album": {
-                        "name": "Test Album 3",
-                        "images": [{"url": "https://via.placeholder.com/300"}]
-                    },
-                    "external_urls": {"spotify": "https://open.spotify.com/track/test3"}
-                }
+                "id": "7dGJo4pcD2V6oG8kP0tJRR",
+                "name": "Eminem",
+                "images": [
+                    {
+                        "url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b",
+                        "width": 640,
+                        "height": 640
+                    }
+                ]
+            },
+            {
+                "id": "1dfeR4HaWDbWqFHLkxsg1d",
+                "name": "Queen",
+                "images": [
+                    {
+                        "url": "https://i.scdn.co/image/b040846ceba13c3e9c125d68389491094e7f2982",
+                        "width": 640,
+                        "height": 640
+                    }
+                ]
+            },
+            {
+                "id": "53XhwfbYqKCa1cC15pYq2q",
+                "name": "Imagine Dragons",
+                "images": [
+                    {
+                        "url": "https://i.scdn.co/image/ab6761610000e5eb20bbcd5173599c6c8e5dbfa7",
+                        "width": 640,
+                        "height": 640
+                    }
+                ]
             }
         ]
         
-        return test_tracks 
+        print(f"[DEBUG APP] Returning {len(dummy_artists)} hard-coded dummy artists")
+        return dummy_artists
+            
+    def _get_track_audio_features(self, track_id):
+        """
+        Get audio features for a track from the Spotify API.
+        
+        Args:
+            track_id (str): The Spotify track ID
+            
+        Returns:
+            dict: Dictionary containing audio features or None
+        """
+        if not self.spotify_service:
+            print("[DEBUG APP] No Spotify service available for audio features fetch")
+            return None
+            
+        try:
+            audio_features = self.spotify_service.get_track_audio_features(track_id)
+            return audio_features
+        except Exception as e:
+            print(f"[DEBUG APP] Error fetching track audio features: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return None 

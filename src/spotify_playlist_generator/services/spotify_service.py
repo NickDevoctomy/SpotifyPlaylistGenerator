@@ -116,7 +116,7 @@ class SpotifyService:
                     playlist_id, 
                     limit=limit, 
                     offset=offset,
-                    fields='items(track(id,name,uri,duration_ms,artists(name),album(name,images),external_urls))'
+                    fields='items(track(id,name,uri,duration_ms,artists(id,name),album(id,name,images),external_urls))'
                 )
             except Exception as specific_error:
                 print(f"[DEBUG] Error with specific fields, trying minimal fields: {str(specific_error)}")
@@ -147,7 +147,14 @@ class SpotifyService:
                 if 'artists' not in track:
                     print(f"[DEBUG] Track '{track.get('name', 'Unknown')}' has no artists field, adding empty array")
                     track['artists'] = []
-                    
+                else:
+                    # Validate that artist entries have proper IDs
+                    for idx, artist in enumerate(track['artists']):
+                        if 'id' not in artist or not artist['id']:
+                            print(f"[DEBUG] Artist {idx} ({artist.get('name', 'Unknown')}) missing ID")
+                        elif not isinstance(artist['id'], str) or len(artist['id']) != 22:
+                            print(f"[DEBUG] Artist {idx} ({artist.get('name', 'Unknown')}) has invalid ID: {artist['id']!r}")
+                
                 # Ensure album has images
                 if 'album' not in track:
                     print(f"[DEBUG] Track '{track.get('name', 'Unknown')}' has no album field, adding default")
@@ -168,4 +175,54 @@ class SpotifyService:
             print(f"[DEBUG] Error fetching playlist tracks: {str(e)}")
             import traceback
             print(f"[DEBUG] Traceback: {traceback.format_exc()}")
-            return [] 
+            return []
+
+    def get_saved_tracks(self):
+        """Get the current user's saved tracks."""
+        return self._paginate_all_items('me/tracks')
+
+    def add_tracks_to_playlist(self, playlist_id, track_uris):
+        """
+        Add tracks to a playlist.
+        
+        Args:
+            playlist_id: Spotify playlist ID
+            track_uris: List of Spotify track URIs to add to the playlist
+            
+        Returns:
+            bool: True if the operation was successful
+        """
+        if not self.client:
+            print("Cannot add tracks: No authenticated Spotify client")
+            return False
+        
+        try:
+            self.client.playlist_add_items(playlist_id, track_uris)
+            return True
+        except Exception as e:
+            print(f"Error adding tracks to playlist: {str(e)}")
+            return False
+            
+    def get_track_audio_features(self, track_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get audio features for a track.
+        
+        Args:
+            track_id: Spotify track ID
+            
+        Returns:
+            Dictionary containing audio features or None if not available
+        """
+        if not self.client:
+            print("Cannot get audio features: No authenticated Spotify client")
+            return None
+        
+        try:
+            audio_features = self.client.audio_features(track_id)
+            
+            if audio_features and len(audio_features) > 0:
+                return audio_features[0]
+            return None
+        except Exception as e:
+            print(f"Error fetching track audio features: {str(e)}")
+            return None 
