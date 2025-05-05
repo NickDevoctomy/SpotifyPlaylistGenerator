@@ -10,6 +10,7 @@ from src.spotify_playlist_generator.services.auth_service import SpotifyAuthServ
 from src.spotify_playlist_generator.services.spotify_service import SpotifyService
 from src.spotify_playlist_generator.ui.template_loader import TemplateLoader
 from src.spotify_playlist_generator.ui.ui_components import PlaylistComponents, CustomStyles
+import os
 
 class AppUI:
     """Main UI class that handles the application interface."""
@@ -390,7 +391,125 @@ class AppUI:
             with ui.row():
                 ui.label('Redirect URI:').classes('text-bold')
                 ui.label(self.auth_service.redirect_uri or 'Not configured').classes(
-                    'text-green-600' if self.auth_service.redirect_uri else 'text-red-600') 
+                    'text-green-600' if self.auth_service.redirect_uri else 'text-red-600')
+                    
+            # Last.fm API Configuration
+            ui.label('Last.fm API Configuration').classes('text-subtitle1 mt-4')
+            with ui.row():
+                ui.label('API Key:').classes('text-bold')
+                lastfm_api_key = os.environ.get("LASTFM_API_KEY")
+                ui.label('✓ Configured' if lastfm_api_key else '✗ Not configured').classes(
+                    'text-green-600' if lastfm_api_key else 'text-red-600')
+            
+            with ui.row():
+                ui.label('Shared Secret:').classes('text-bold')
+                lastfm_shared_secret = os.environ.get("LASTFM_SHARED_SECRET")
+                ui.label('✓ Configured' if lastfm_shared_secret else '✗ Not configured').classes(
+                    'text-green-600' if lastfm_shared_secret else 'text-red-600')
+            
+            # Test LastFM API button
+            with ui.row().classes('mt-4'):
+                ui.button('Test Last.fm API', icon='api').classes('bg-blue-500 text-white').on('click', self._test_lastfm_api)
+    
+    def _test_lastfm_api(self):
+        """Test the Last.fm API connection."""
+        try:
+            # Import LastFMService here to avoid circular imports
+            from src.spotify_playlist_generator.services.lastfm_service import LastFMService
+            
+            # Show loading notification
+            ui.notify('Testing Last.fm API connection...', color='info')
+            
+            # Initialize and test the LastFM service
+            lastfm_service = LastFMService()
+            result = lastfm_service.test_connection()
+            
+            # Log full result for debugging
+            print(f"[DEBUG APP] LastFM test result: {result}")
+            
+            if result['success']:
+                # Show success and the similar artists in a dialog
+                ui.notify(result['message'], color='positive')
+                
+                # Create a dialog to show the similar artists
+                with ui.dialog() as dialog, ui.card().classes('p-6 max-w-3xl'):
+                    ui.label('Last.fm API Test Results').classes('text-h6 mb-4')
+                    ui.label(result['message']).classes('text-body1 mb-4')
+                    
+                    # Display the similar artists
+                    if result.get('data') and isinstance(result['data'], list) and len(result['data']) > 0:
+                        ui.label('Similar Artists:').classes('text-subtitle1 mt-2 mb-3')
+                        with ui.grid(columns=3).classes('w-full gap-4'):
+                            for artist in result['data']:
+                                with ui.card().classes('p-4'):
+                                    # Artist name
+                                    ui.label(artist.get('name', 'Unknown Artist')).classes('text-body1 font-bold mb-2')
+                                    
+                                    # Match score if available
+                                    if 'match' in artist:
+                                        try:
+                                            match_value = float(artist['match'])
+                                            ui.label(f"Match: {match_value:.2f}").classes('text-body2 mb-2')
+                                        except (ValueError, TypeError):
+                                            ui.label(f"Match: Unknown").classes('text-body2 mb-2')
+                                    
+                                    # Artist URL
+                                    artist_url = artist.get('url')
+                                    if artist_url:
+                                        with ui.link(target=artist_url, new_tab=True).classes('mt-2'):
+                                            ui.button('Open in Last.fm', icon='open_in_new').classes('bg-red-500 text-white')
+                                    
+                                    # Note about images
+                                    ui.label("(Last.fm API doesn't provide artist images)").classes('text-xs text-gray-500 mt-2')
+                    else:
+                        ui.label('No similar artists data returned').classes('text-body1 text-orange-500')
+                    
+                    # Close button
+                    ui.button('Close', icon='close').on('click', dialog.close).classes('mt-4')
+                    
+                # Open the dialog
+                dialog.open()
+            else:
+                # Show error
+                error_msg = result.get('message', 'Unknown error')
+                ui.notify(f"Last.fm API test failed: {error_msg}", color='negative')
+                
+                # Show error details in a dialog for better visibility
+                with ui.dialog() as error_dialog, ui.card().classes('p-6'):
+                    ui.label('Last.fm API Test Failed').classes('text-h6 text-red-500 mb-4')
+                    ui.label(error_msg).classes('text-body1 mb-4')
+                    
+                    # Environment check
+                    api_key = os.environ.get("LASTFM_API_KEY")
+                    secret = os.environ.get("LASTFM_SHARED_SECRET")
+                    
+                    ui.label('Environment Check:').classes('text-subtitle1 mt-2')
+                    ui.label(f"API Key: {'Configured' if api_key else 'Not configured'}").classes(
+                        'text-body2 text-green-600' if api_key else 'text-body2 text-red-600')
+                    ui.label(f"Shared Secret: {'Configured' if secret else 'Not configured'}").classes(
+                        'text-body2 text-green-600' if secret else 'text-body2 text-red-600')
+                    
+                    ui.button('Close', icon='close').on('click', error_dialog.close).classes('mt-4')
+                    
+                error_dialog.open()
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"[DEBUG APP] Error testing Last.fm API: {error_details}")
+            ui.notify(f'Error testing Last.fm API: {str(e)}', color='negative')
+            
+            # Show detailed error in dialog
+            with ui.dialog() as exception_dialog, ui.card().classes('p-6'):
+                ui.label('Last.fm API Test Error').classes('text-h6 text-red-500 mb-4')
+                ui.label(f"Error: {str(e)}").classes('text-body1 mb-4')
+                
+                # Show traceback in a pre-formatted block with scrolling
+                with ui.element('pre').classes('bg-gray-100 p-4 rounded max-h-64 overflow-y-auto text-xs'):
+                    ui.label(error_details)
+                
+                ui.button('Close', icon='close').on('click', exception_dialog.close).classes('mt-4')
+                
+            exception_dialog.open()
     
     def _load_playlist_tracks(self, playlist_id):
         """Load tracks for a playlist and update the UI."""
@@ -651,7 +770,7 @@ class AppUI:
                 
                 # Similar Artists section (always shown with hardcoded data)
                 ui.separator().classes('my-4')
-                ui.label("Similar Artists").classes('text-h6 mb-4')
+                ui.label("Related Artists").classes('text-h6 mb-4')
                 
                 # Always use hardcoded similar artists
                 similar_artists = self._get_dummy_similar_artists('any-id')  # Just pass a placeholder
@@ -659,18 +778,29 @@ class AppUI:
                 if similar_artists:
                     with ui.grid(columns=5).classes('w-full gap-4'):
                         for artist in similar_artists[:5]:
+                            if not isinstance(artist, dict):
+                                continue
+                                
                             with ui.card().classes('p-3 hover:bg-gray-50'):
                                 artist_name = artist.get('name', 'Unknown')
                                 artist_id = artist.get('id', '')
                                 artist_url = f"https://open.spotify.com/artist/{artist_id}" if artist_id else None
                                 
-                                # Artist image
+                                # Artist image - with improved error handling
                                 artist_image = None
-                                if 'images' in artist and artist['images'] and len(artist['images']) > 0:
-                                    artist_image = artist['images'][0].get('url')
+                                if 'images' in artist and isinstance(artist['images'], list) and len(artist['images']) > 0:
+                                    img = artist['images'][0]
+                                    if isinstance(img, dict) and 'url' in img:
+                                        artist_image = img.get('url')
                                 
                                 if artist_image:
-                                    ui.image(artist_image).classes('w-full aspect-square object-cover rounded-full')
+                                    # Use try-except to handle any image loading errors
+                                    try:
+                                        ui.image(artist_image).classes('w-full aspect-square object-cover rounded-full')
+                                    except Exception as img_error:
+                                        print(f"[DEBUG APP] Error loading artist image: {str(img_error)}")
+                                        with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center rounded-full'):
+                                            ui.icon('person').classes('text-gray-400')
                                 else:
                                     with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center rounded-full'):
                                         ui.icon('person').classes('text-gray-400')
@@ -682,7 +812,7 @@ class AppUI:
                                 else:
                                     ui.label(artist_name).classes('text-center text-sm mt-2')
                 else:
-                    ui.label("No similar artists available").classes('text-gray-500')
+                    ui.label("No related artists available").classes('text-gray-500')
         
         # Now switch to the tab
         self.playlist_tabs.set_value(tab_id)
@@ -707,7 +837,7 @@ class AppUI:
     
     def _get_dummy_similar_artists(self, artist_id):
         """
-        Return hard-coded dummy similar artists instead of calling the Spotify API.
+        Return hard-coded dummy related artists instead of calling the Spotify API.
         
         Args:
             artist_id (str): Artist ID (unused, just for interface compatibility)
@@ -715,69 +845,85 @@ class AppUI:
         Returns:
             list: A list of dummy artist objects
         """
-        print(f"[DEBUG APP] Generating dummy similar artists (artist_id: {artist_id})")
+        print(f"[DEBUG APP] Generating dummy related artists (artist_id: {artist_id})")
         
-        # Hard-coded dummy data with the same structure as Spotify API response
-        dummy_artists = [
-            {
-                "id": "4tZwfgrHOc3mvqYlEYSvVi",
-                "name": "Daft Punk",
-                "images": [
-                    {
-                        "url": "https://i.scdn.co/image/ab6761610000e5eb8b9b5ce15d72215db8e35fbd",
-                        "width": 640,
-                        "height": 640
-                    }
-                ]
-            },
-            {
-                "id": "5INjqkS1o8h1imAzPqGZBb",
-                "name": "Tame Impala",
-                "images": [
-                    {
-                        "url": "https://i.scdn.co/image/ab6761610000e5eb5d2b407da59dcc18e7c04c04", 
-                        "width": 640, 
-                        "height": 640
-                    }
-                ]
-            },
-            {
-                "id": "7dGJo4pcD2V6oG8kP0tJRR",
-                "name": "Eminem",
-                "images": [
-                    {
-                        "url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b",
-                        "width": 640,
-                        "height": 640
-                    }
-                ]
-            },
-            {
-                "id": "1dfeR4HaWDbWqFHLkxsg1d",
-                "name": "Queen",
-                "images": [
-                    {
-                        "url": "https://i.scdn.co/image/b040846ceba13c3e9c125d68389491094e7f2982",
-                        "width": 640,
-                        "height": 640
-                    }
-                ]
-            },
-            {
-                "id": "53XhwfbYqKCa1cC15pYq2q",
-                "name": "Imagine Dragons",
-                "images": [
-                    {
-                        "url": "https://i.scdn.co/image/ab6761610000e5eb20bbcd5173599c6c8e5dbfa7",
-                        "width": 640,
-                        "height": 640
-                    }
-                ]
-            }
-        ]
-        
-        print(f"[DEBUG APP] Returning {len(dummy_artists)} hard-coded dummy artists")
-        return dummy_artists
+        try:
+            # Hard-coded dummy data with the same structure as Spotify API response
+            dummy_artists = [
+                {
+                    "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                    "name": "Daft Punk",
+                    "images": [
+                        {
+                            "url": "https://i.scdn.co/image/ab6761610000e5eb8b9b5ce15d72215db8e35fbd",
+                            "width": 640,
+                            "height": 640
+                        }
+                    ]
+                },
+                {
+                    "id": "5INjqkS1o8h1imAzPqGZBb",
+                    "name": "Tame Impala",
+                    "images": [
+                        {
+                            "url": "https://i.scdn.co/image/ab6761610000e5eb5d2b407da59dcc18e7c04c04", 
+                            "width": 640, 
+                            "height": 640
+                        }
+                    ]
+                },
+                {
+                    "id": "7dGJo4pcD2V6oG8kP0tJRR",
+                    "name": "Eminem",
+                    "images": [
+                        {
+                            "url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b",
+                            "width": 640,
+                            "height": 640
+                        }
+                    ]
+                },
+                {
+                    "id": "1dfeR4HaWDbWqFHLkxsg1d",
+                    "name": "Queen",
+                    "images": [
+                        {
+                            "url": "https://i.scdn.co/image/b040846ceba13c3e9c125d68389491094e7f2982",
+                            "width": 640,
+                            "height": 640
+                        }
+                    ]
+                },
+                {
+                    "id": "53XhwfbYqKCa1cC15pYq2q",
+                    "name": "Imagine Dragons",
+                    "images": [
+                        {
+                            "url": "https://i.scdn.co/image/ab6761610000e5eb20bbcd5173599c6c8e5dbfa7",
+                            "width": 640,
+                            "height": 640
+                        }
+                    ]
+                }
+            ]
+            
+            print(f"[DEBUG APP] Returning {len(dummy_artists)} hard-coded dummy artists")
+            return dummy_artists
+        except Exception as e:
+            print(f"[DEBUG APP] Error getting dummy similar artists: {str(e)}")
+            # Return a minimal fallback list that won't cause errors
+            return [
+                {
+                    "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                    "name": "Daft Punk",
+                    "images": []
+                },
+                {
+                    "id": "1dfeR4HaWDbWqFHLkxsg1d",
+                    "name": "Queen",
+                    "images": []
+                }
+            ]
             
     def _get_track_audio_features(self, track_id):
         """

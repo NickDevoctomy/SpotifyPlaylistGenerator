@@ -1,6 +1,7 @@
 nicegui>=1.4.5
 spotipy>=2.23.0
 python-dotenv>=1.0.0
+pylast>=5.5.0
 
 # Test dependencies
 pytest>=7.4.0
