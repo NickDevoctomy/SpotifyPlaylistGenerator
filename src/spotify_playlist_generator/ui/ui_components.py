@@ -192,7 +192,7 @@ class PlaylistComponents:
                             # Play button (smaller and inline)
                             if track_url:
                                 with ui.link(target=track_url, new_tab=True).classes('no-underline ml-auto flex-shrink-0'):
-                                    ui.button(icon='play_arrow', size='sm').props('flat round dense').classes('text-green-600')
+                                    ui.button(icon='play_arrow').props('flat round dense').classes('text-green-600 text-sm')
                         
                         # Artist and album on one line with truncation
                         with ui.label(f"{artist_display} • {album_name}").classes('text-xs text-gray-500 truncate w-full'):
