@@ -739,243 +739,173 @@ class AppUI:
                         if isinstance(album, dict) and 'release_date' in album:
                             ui.label(f"Released: {album.get('release_date')}").classes('text-body2 text-gray-700')
                 
-                # Audio features section if available
-                audio_features = None
-                if track_id:
-                    try:
-                        audio_features = self._get_track_audio_features(track_id)
-                    except Exception as e:
-                        print(f"[DEBUG APP] Error handling audio features: {str(e)}")
-                        audio_features = None
-                    
-                if audio_features:
-                    ui.separator().classes('my-4')
-                    ui.label("Audio Features").classes('text-h6 mb-4')
-                    
-                    # Check if we're using placeholder data (all values are 0.5)
-                    is_placeholder = all(value == 0.5 for key, value in audio_features.items() 
-                                        if key in ['danceability', 'energy', 'acousticness', 
-                                                  'instrumentalness', 'liveness', 'valence'])
-                    
-                    if is_placeholder:
-                        # Show a message that audio features aren't available
-                        ui.label("Detailed audio features are not available for this track").classes('text-orange-500 mb-4')
-                    
-                    # Display audio features in a grid of cards
-                    with ui.grid(columns=4).classes('w-full gap-4 mb-6'):
-                        # Features to display
-                        features = [
-                            ('Danceability', audio_features.get('danceability', 0), 'emoji_emotions'),
-                            ('Energy', audio_features.get('energy', 0), 'bolt'),
-                            ('Acousticness', audio_features.get('acousticness', 0), 'acoustic_detector'),
-                            ('Instrumentalness', audio_features.get('instrumentalness', 0), 'piano'),
-                            ('Liveness', audio_features.get('liveness', 0), 'mic'),
-                            ('Valence', audio_features.get('valence', 0), 'sentiment_satisfied'),
-                            ('Speechiness', audio_features.get('speechiness', 0), 'record_voice_over'),
-                            ('Tempo', audio_features.get('tempo', 0), 'speed', False)
-                        ]
-                        
-                        for feature in features:
-                            name, value, icon, *args = feature
-                            is_percent = len(args) == 0 or args[0]  # Default is True if not specified
-                            
-                            with ui.card().classes('p-4 bg-gray-50'):
-                                with ui.row().classes('items-center w-full gap-2'):
-                                    ui.icon(icon).classes('text-blue-500')
-                                    ui.label(name).classes('text-sm font-bold')
-                                
-                                if is_percent:
-                                    # For percentage values (0-1)
-                                    percentage = int(value * 100)
-                                    with ui.linear_progress(value=value).classes('w-full my-2'):
-                                        pass
-                                    ui.label(f"{percentage}%").classes('text-right w-full text-sm')
-                                else:
-                                    # For non-percentage values (like tempo)
-                                    ui.label(f"{value:.1f}").classes('text-xl font-bold mt-2')
-                
                 # Related Artists section - fetch from LastFM API
                 ui.separator().classes('my-4')
                 
-                # Track whether we're using real or dummy data
-                using_real_data = False
-                
+                # Create section header with tooltip
                 with ui.row().classes('items-center justify-between mb-2'):
                     ui.label("Related Artists").classes('text-h6')
                     
                     # Add data source indicator with tooltip
                     with ui.tooltip('Artist similarity data powered by Last.fm API'):
                         data_source_badge = ui.badge(
-                            "Data from Last.fm", 
-                            color="green"
+                            "Loading...", 
+                            color="blue"
                         ).props('outline').classes('text-xs')
                 
-                # Create a container to hold both loading spinner and artists grid
-                related_artists_container = ui.element('div').classes('w-full relative min-h-[200px]')
+                # Create a simple container to show loading state immediately
+                artists_container = ui.element('div').classes('w-full py-8')
                 
-                # Create a loading overlay with spinner
-                with related_artists_container:
-                    loading_overlay = ui.element('div').classes('absolute inset-0 flex flex-col items-center justify-center z-10 bg-white bg-opacity-80')
-                    with loading_overlay:
-                        ui.spinner(size='lg', color='primary').classes('text-blue-500')
-                        ui.label('Loading related artists...').classes('ml-4 text-gray-700')
-                        loading_status = ui.label('').classes('text-xs text-gray-500 mt-2')
+                # Show an obvious loading message directly in the container
+                with artists_container:
+                    loading_row = ui.row().classes('items-center justify-center w-full')
+                    with loading_row:
+                        ui.spinner(size='xl', color='primary')
+                        ui.label('Loading related artists...').classes('ml-4 text-lg font-medium')
                 
-                # Get artist name from track for LastFM lookup
-                primary_artist = None
-                if 'artists' in track and isinstance(track['artists'], list) and len(track['artists']) > 0:
-                    primary_artist = track['artists'][0].get('name') if isinstance(track['artists'][0], dict) else None
-                
-                # Try to get similar artists from LastFM if we have an artist name
-                lastfm_artists = []
-                if primary_artist:
-                    try:
-                        # Update loading status
-                        loading_status.text = f"Requesting similar artists for: {primary_artist}"
-                        
-                        # Import LastFMService here to avoid circular imports
-                        from src.spotify_playlist_generator.services.lastfm_service import LastFMService
-                        
-                        # Initialize LastFM service
-                        lastfm_service = LastFMService()
-                        # Fetch 10 related artists to have extras if some aren't found on Spotify
-                        lastfm_artists = lastfm_service.get_similar_artists(primary_artist, limit=10)
-                        using_real_data = True
-                        
-                        if not lastfm_artists:
-                            # Update loading status if no artists found
-                            loading_status.text = f"No related artists found for: {primary_artist}. Using demo data..."
-                        
-                        print(f"[DEBUG APP] Found {len(lastfm_artists)} related artists for {primary_artist} from LastFM API")
-                    except Exception as e:
-                        print(f"[DEBUG APP] Error fetching related artists from LastFM: {str(e)}")
-                        # Fall back to dummy data if LastFM fails
-                        lastfm_artists = []
-                        
-                        # Update loading status if LastFM API fails
-                        loading_status.text = f"Error getting data from Last.fm. Using demo data..."
-                else:
-                    # Update loading status if no primary artist found
-                    loading_status.text = "No artist information available. Using demo data..."
-                
-                # Cross-reference with Spotify to get high-quality artist data and images
-                related_artists = []
-                spotify_artists_count = 0
-                max_displayed_artists = 5
-                attempts = 0
-                
-                if lastfm_artists and self.spotify_service:
-                    for artist in lastfm_artists:
-                        if spotify_artists_count >= max_displayed_artists:
-                            break
-                            
-                        artist_name = artist.get('name', '')
-                        if not artist_name:
-                            continue
-                        
-                        attempts += 1
-                        
-                        # Update loading status for user feedback
-                        loading_status.text = f"Looking up artist: {artist_name} ({attempts}/{len(lastfm_artists)})"
-                            
-                        try:
-                            # Search for the artist on Spotify
-                            spotify_artist = self.spotify_service.search_artist(artist_name)
-                            if spotify_artist:
-                                # Combine LastFM match score with Spotify artist data
-                                spotify_artist['match'] = artist.get('match', 0)
-                                related_artists.append(spotify_artist)
-                                spotify_artists_count += 1
-                                print(f"[DEBUG APP] Found Spotify data for artist: {artist_name}")
-                                
-                                # Update loading status with success message
-                                loading_status.text = f"Found {spotify_artists_count} of {max_displayed_artists} artists..."
-                            else:
-                                print(f"[DEBUG APP] No Spotify data found for artist: {artist_name}")
-                        except Exception as e:
-                            print(f"[DEBUG APP] Error searching Spotify for artist '{artist_name}': {str(e)}")
-                    
-                    # If we checked all LastFM artists but couldn't find any on Spotify
-                    if attempts > 0 and spotify_artists_count == 0:
-                        loading_status.text = f"Checked {attempts} artists but none were found on Spotify. Using demo data..."
-                
-                # If we couldn't find any artists on Spotify or LastFM failed, use dummy data
-                if not related_artists:
-                    related_artists = self._get_dummy_similar_artists('any-id')
+                # We'll need to access the UI later, so run this in an async function
+                async def fetch_related_artists():
+                    # Track whether we're using real or dummy data
                     using_real_data = False
-                    print(f"[DEBUG APP] Using dummy related artists (no Spotify artists found)")
-                
-                # Update the badge color if we're using dummy data
-                if not using_real_data:
-                    data_source_badge.text = "Demo Data"
-                    data_source_badge.color = "orange"
-                
-                # Clear the loading spinner by hiding the overlay
-                loading_overlay.classes('hidden')
-                
-                # Now add the actual content to the container
-                with related_artists_container:
-                    if related_artists:
-                        with ui.grid(columns=5).classes('w-full gap-4'):
-                            for artist in related_artists[:5]:
-                                if not isinstance(artist, dict):
-                                    continue
-                                    
-                                with ui.card().classes('p-3 hover:bg-gray-50'):
-                                    artist_name = artist.get('name', 'Unknown')
-                                    
-                                    # Get Spotify URL for the artist
-                                    artist_url = None
-                                    if 'external_urls' in artist and isinstance(artist['external_urls'], dict):
-                                        artist_url = artist['external_urls'].get('spotify')
-                                    elif 'id' in artist:
-                                        artist_id = artist.get('id', '')
-                                        if artist_id:
-                                            artist_url = f"https://open.spotify.com/artist/{artist_id}"
-                                    
-                                    # Layout structure for consistent appearance
-                                    with ui.column().classes('w-full items-center gap-2'):
-                                        # Artist image from Spotify
-                                        artist_image = None
-                                        if 'images' in artist and isinstance(artist['images'], list) and len(artist['images']) > 0:
-                                            img = artist['images'][0]
-                                            if isinstance(img, dict) and 'url' in img:
-                                                artist_image = img.get('url')
+                    
+                    # Get artist name from track for LastFM lookup
+                    primary_artist = None
+                    if 'artists' in track and isinstance(track['artists'], list) and len(track['artists']) > 0:
+                        primary_artist = track['artists'][0].get('name') if isinstance(track['artists'][0], dict) else None
+                    
+                    # Try to get similar artists from LastFM if we have an artist name
+                    lastfm_artists = []
+                    if primary_artist:
+                        try:
+                            # Import LastFMService here to avoid circular imports
+                            from src.spotify_playlist_generator.services.lastfm_service import LastFMService
+                            
+                            # Initialize LastFM service
+                            lastfm_service = LastFMService()
+                            # Fetch 10 related artists to have extras if some aren't found on Spotify
+                            lastfm_artists = lastfm_service.get_similar_artists(primary_artist, limit=10)
+                            using_real_data = True
+                            
+                            print(f"[DEBUG APP] Found {len(lastfm_artists)} related artists for {primary_artist} from LastFM API")
+                        except Exception as e:
+                            print(f"[DEBUG APP] Error fetching related artists from LastFM: {str(e)}")
+                            # Fall back to dummy data if LastFM fails
+                            lastfm_artists = []
+                    
+                    # Cross-reference with Spotify to get high-quality artist data and images
+                    related_artists = []
+                    spotify_artists_count = 0
+                    max_displayed_artists = 5
+                    attempts = 0
+                    
+                    if lastfm_artists and self.spotify_service:
+                        for artist in lastfm_artists:
+                            if spotify_artists_count >= max_displayed_artists:
+                                break
+                                
+                            artist_name = artist.get('name', '')
+                            if not artist_name:
+                                continue
+                            
+                            attempts += 1
+                            
+                            try:
+                                # Search for the artist on Spotify
+                                spotify_artist = self.spotify_service.search_artist(artist_name)
+                                if spotify_artist:
+                                    # Combine LastFM match score with Spotify artist data
+                                    spotify_artist['match'] = artist.get('match', 0)
+                                    related_artists.append(spotify_artist)
+                                    spotify_artists_count += 1
+                                    print(f"[DEBUG APP] Found Spotify data for artist: {artist_name}")
+                                else:
+                                    print(f"[DEBUG APP] No Spotify data found for artist: {artist_name}")
+                            except Exception as e:
+                                print(f"[DEBUG APP] Error searching Spotify for artist '{artist_name}': {str(e)}")
+                    
+                    # If we couldn't find any artists on Spotify or LastFM failed, use dummy data
+                    if not related_artists:
+                        related_artists = self._get_dummy_similar_artists('any-id')
+                        using_real_data = False
+                        print(f"[DEBUG APP] Using dummy related artists (no Spotify artists found)")
+                    
+                    # Update the badge color based on data source
+                    if using_real_data:
+                        data_source_badge.text = "Data from Last.fm"
+                        data_source_badge.color = "green"
+                    else:
+                        data_source_badge.text = "Demo Data"
+                        data_source_badge.color = "orange"
+                    
+                    # Clear the loading message
+                    artists_container.clear()
+                    
+                    # Now add the actual grid of artists to the container
+                    with artists_container:
+                        if related_artists:
+                            with ui.grid(columns=5).classes('w-full gap-4'):
+                                for artist in related_artists[:5]:
+                                    if not isinstance(artist, dict):
+                                        continue
                                         
-                                        if artist_image:
-                                            # Use try-except to handle any image loading errors
-                                            try:
-                                                ui.image(artist_image).classes('w-full aspect-square object-cover rounded-full')
-                                            except Exception as img_error:
-                                                print(f"[DEBUG APP] Error loading artist image: {str(img_error)}")
+                                    with ui.card().classes('p-3 hover:bg-gray-50'):
+                                        artist_name = artist.get('name', 'Unknown')
+                                        
+                                        # Get Spotify URL for the artist
+                                        artist_url = None
+                                        if 'external_urls' in artist and isinstance(artist['external_urls'], dict):
+                                            artist_url = artist['external_urls'].get('spotify')
+                                        elif 'id' in artist:
+                                            artist_id = artist.get('id', '')
+                                            if artist_id:
+                                                artist_url = f"https://open.spotify.com/artist/{artist_id}"
+                                        
+                                        # Layout structure for consistent appearance
+                                        with ui.column().classes('w-full items-center gap-2'):
+                                            # Artist image from Spotify
+                                            artist_image = None
+                                            if 'images' in artist and isinstance(artist['images'], list) and len(artist['images']) > 0:
+                                                img = artist['images'][0]
+                                                if isinstance(img, dict) and 'url' in img:
+                                                    artist_image = img.get('url')
+                                            
+                                            if artist_image:
+                                                # Use try-except to handle any image loading errors
+                                                try:
+                                                    ui.image(artist_image).classes('w-full aspect-square object-cover rounded-full')
+                                                except Exception as img_error:
+                                                    print(f"[DEBUG APP] Error loading artist image: {str(img_error)}")
+                                                    with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center rounded-full'):
+                                                        ui.icon('person').classes('text-gray-400')
+                                            else:
                                                 with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center rounded-full'):
                                                     ui.icon('person').classes('text-gray-400')
-                                        else:
-                                            with ui.element('div').classes('w-full aspect-square bg-gray-200 flex items-center justify-center rounded-full'):
-                                                ui.icon('person').classes('text-gray-400')
-                                        
-                                        # Artist name 
-                                        if artist_url:
-                                            with ui.link(target=artist_url, new_tab=True).classes('no-underline'):
-                                                ui.label(artist_name).classes('text-center text-sm font-bold text-blue-600 hover:underline mt-1')
-                                        else:
-                                            ui.label(artist_name).classes('text-center text-sm font-bold mt-1')
-                                        
-                                        # Match score from LastFM with visual indicator
-                                        if 'match' in artist:
-                                            try:
-                                                match_value = float(artist.get('match', 0))
-                                                if match_value > 0:
-                                                    # Show as percentage with progress bar
-                                                    match_percent = int(match_value * 100)
-                                                    ui.label(f"Match: {match_percent}%").classes('text-xs text-center w-full')
-                                                    with ui.linear_progress(value=match_value).classes('w-full'):
-                                                        pass
-                                            except (ValueError, TypeError):
-                                                # Skip match display if value is invalid
-                                                pass
-                    else:
-                        ui.label("No related artists available").classes('text-gray-500')
+                                            
+                                            # Artist name 
+                                            if artist_url:
+                                                with ui.link(target=artist_url, new_tab=True).classes('no-underline'):
+                                                    ui.label(artist_name).classes('text-center text-sm font-bold text-blue-600 hover:underline mt-1')
+                                            else:
+                                                ui.label(artist_name).classes('text-center text-sm font-bold mt-1')
+                                            
+                                            # Match score from LastFM with visual indicator
+                                            if 'match' in artist:
+                                                try:
+                                                    match_value = float(artist.get('match', 0))
+                                                    if match_value > 0:
+                                                        # Show as percentage with progress bar
+                                                        match_percent = int(match_value * 100)
+                                                        ui.label(f"Match: {match_percent}%").classes('text-xs text-center w-full')
+                                                        with ui.linear_progress(value=match_value).classes('w-full'):
+                                                            pass
+                                                except (ValueError, TypeError):
+                                                    # Skip match display if value is invalid
+                                                    pass
+                        else:
+                            ui.label("No related artists available").classes('text-gray-500 text-center w-full my-8')
+                
+                # Kick off the async task to fetch artists
+                ui.timer(0.1, lambda: fetch_related_artists(), once=True)
         
         # Now switch to the tab
         self.playlist_tabs.set_value(tab_id)
@@ -1086,27 +1016,4 @@ class AppUI:
                     "name": "Queen",
                     "images": []
                 }
-            ]
-            
-    def _get_track_audio_features(self, track_id):
-        """
-        Get audio features for a track from the Spotify API.
-        
-        Args:
-            track_id (str): The Spotify track ID
-            
-        Returns:
-            dict: Dictionary containing audio features or None
-        """
-        if not self.spotify_service:
-            print("[DEBUG APP] No Spotify service available for audio features fetch")
-            return None
-            
-        try:
-            audio_features = self.spotify_service.get_track_audio_features(track_id)
-            return audio_features
-        except Exception as e:
-            print(f"[DEBUG APP] Error fetching track audio features: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
-            return None 
+            ] 
