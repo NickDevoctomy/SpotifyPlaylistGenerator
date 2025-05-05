@@ -225,4 +225,40 @@ class SpotifyService:
             return None
         except Exception as e:
             print(f"Error fetching track audio features: {str(e)}")
+            return None
+            
+    def search_artist(self, artist_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Search for an artist by name and return the top result.
+        
+        Args:
+            artist_name: Name of the artist to search for
+            
+        Returns:
+            Dictionary containing artist data or None if not found
+        """
+        if not self.client:
+            print(f"Cannot search for artist '{artist_name}': No authenticated Spotify client")
+            return None
+        
+        try:
+            # Perform a search limited to artist type
+            results = self.client.search(q=f"artist:{artist_name}", type="artist", limit=1)
+            
+            # Extract artists from results
+            artists = results.get('artists', {}).get('items', [])
+            
+            # Return the first artist if available
+            if artists and len(artists) > 0:
+                artist = artists[0]
+                # Ensure we have image info
+                if not artist.get('images'):
+                    artist['images'] = []
+                return artist
+                
+            return None
+        except Exception as e:
+            print(f"Error searching for artist '{artist_name}': {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return None 
